@@ -62,9 +62,15 @@ class InjectEngine(private val context: Context) {
 
         // --- PrepareNative ---
         log("phase=PrepareNative")
-        if (!PreloaderNative.libraryLoaded) {
-            val err = PreloaderNative.loadError ?: "libslime_preloader.so missing"
-            log("FAIL native library: $err")
+        val runtime = NativeRuntimeLoader.load(context)
+        log("runtime ABI=${runtime.abi} supported=${runtime.supportedAbis.joinToString()}")
+        log("runtime dir=${runtime.libraryDirectory} libraries=${runtime.libraries.size}")
+        runtime.libraries.forEach { lib ->
+            log("native ${lib.name} size=${lib.sizeBytes} ELF=${lib.elfClass ?: "?"}/${lib.machine ?: "?"} compatible=${lib.compatible}")
+        }
+        if (!runtime.preloaderLoaded) {
+            val err = runtime.error ?: PreloaderNative.loadError ?: "libslime_preloader.so missing"
+            log("FAIL native runtime: $err")
             return Result(
                 phase = Phase.Failed,
                 ok = false,
@@ -81,7 +87,6 @@ class InjectEngine(private val context: Context) {
             )
         }
         log("native OK: ${PreloaderNative.libraryVersion()}")
-        stageNativeLibs(log)
 
         // --- InitPreloader ---
         log("phase=InitPreloader version=$versionId")
@@ -155,19 +160,6 @@ class InjectEngine(private val context: Context) {
             lines = lines,
             summary = summary,
         )
-    }
-
-    private fun stageNativeLibs(log: (String) -> Unit) {
-        try {
-            val dir = File(context.filesDir, "slime_native")
-            if (!dir.exists()) dir.mkdirs()
-            // Extract packaged jniLibs from APK is handled by system; stage path for future co-load hosts
-            val staged = File(dir, "arm64-v8a")
-            if (!staged.exists()) staged.mkdirs()
-            log("stage dir=${dir.absolutePath}")
-        } catch (t: Throwable) {
-            log("stage warn: ${t.message}")
-        }
     }
 
     private fun attemptAttach(
