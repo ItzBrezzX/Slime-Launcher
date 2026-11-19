@@ -42,9 +42,15 @@ data class ImportedMinecraftRuntime(
 
     val isPrepared: Boolean
         get() = manifest.packageName == Catalog.MC_PACKAGE &&
-            minecraftLibrary.isFile &&
-            minecraftLibrary.length() > 0L &&
-            manifest.abi.isNotBlank()
+            manifest.abi.isNotBlank() &&
+            listOf(
+                "libc++_shared.so",
+                "libfmod.so",
+                "libMediaDecoders_Android.so",
+                "libminecraftpe.so",
+            ).all { name ->
+                File(nativeLibraryDirectory, name).let { it.isFile && it.length() > 0L }
+            }
 }
 
 /**
