@@ -110,11 +110,12 @@ class MinecraftRuntimeInstaller(context: Context) {
                 }
             }.distinct()
             if (paths.isEmpty()) throw IOException("File APK Minecraft terpasang tidak ditemukan")
+            var totalBytes = 0L
             paths.mapIndexed { index, path ->
                 val source = File(path)
                 if (!source.isFile) throw IOException("APK Minecraft tidak ditemukan: $path")
                 val destination = File(apkDirectory, "package-$index.apk")
-                copyFile(source, destination, MAX_TOTAL_APK_BYTES)
+                totalBytes += copyFile(source, destination, MAX_TOTAL_APK_BYTES - totalBytes)
                 destination
             }
         }
