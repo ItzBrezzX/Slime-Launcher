@@ -16,6 +16,11 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Slime">
+        <service
+            android:name=".native.RuntimeHostService"
+            android:exported="false"
+            android:process=":runtime"
+            android:stopWithTask="false" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
