@@ -55,17 +55,23 @@ Isinya, semua terhubung ke native lewat JNI:
 ## Minecraft Runtime Integration
 
 `MinecraftRuntimeBridge` is the in-process API for a custom runtime that
-actually owns the Minecraft process. It initializes Slime's preloader after
-`libminecraftpe.so` is mapped, syncs module settings, gates hook requests,
-and handles runtime shutdown.
+owns the Minecraft game process. It initializes Slime's preloader after
+`libminecraftpe.so` is mapped, synchronizes live module settings, gates hook
+requests, and handles runtime shutdown.
 
-The manifest's private `:runtime` service is a Slime-owned diagnostic/IPC
-process, not the Minecraft process. The normal launcher action still opens
-the installed official Minecraft app separately; it does not inject into it.
-This repository does not yet include the APK import path or launcher-owned
-Minecraft Activity/runtime layer needed for end-to-end co-load.
+`MinecraftRuntimeConfigProvider` supplies the saved active version, module
+flags, numeric settings, signature overrides, and offsets to a same-package
+runtime without manually rebuilding the configuration maps. The obsolete
+separate `:runtime` service was removed because it could not see the game
+library mapped in another process.
 
-See [docs/RUNTIME_INTEGRATION.md](docs/RUNTIME_INTEGRATION.md) for the exact
+The normal launcher action still opens the installed official Minecraft app
+separately; it does not inject into it. This repository does not yet include
+the game APK import path or launcher-owned Minecraft Activity/runtime layer
+needed for end-to-end co-load. The native hook backend and per-version
+signatures also remain unfinished.
+
+See [docs/RUNTIME_INTEGRATION.md](docs/RUNTIME_INTEGRATION.md) for the
 runtime callback sequence and remaining prerequisites.
 
 ## Native Runtime Loader
