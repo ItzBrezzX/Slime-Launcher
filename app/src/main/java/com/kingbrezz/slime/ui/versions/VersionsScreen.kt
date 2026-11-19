@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -37,19 +38,82 @@ import com.kingbrezz.slime.ui.theme.Muted
 import com.kingbrezz.slime.ui.theme.SlimeGreen
 
 @Composable
-fun VersionsScreen(vm: SlimeViewModel) {
+fun VersionsScreen(
+    vm: SlimeViewModel,
+    onImportMinecraft: () -> Unit = {},
+    onOpenRuntime: () -> Unit = {},
+) {
     val versions by vm.versions.collectAsState()
     val activeId by vm.activeVersionId.collectAsState()
+    val runtime by vm.runtimeInstall.collectAsState()
+    val busy by vm.busy.collectAsState()
 
     Column(Modifier.fillMaxSize().background(Bg).padding(16.dp)) {
         SectionTitle("Versi", "Release & Preview")
         Text(
-            "Isolasi data per build, seperti LeviLauncher. Lencana Slime = dukungan klien.",
+            "Kelola versi launcher dan siapkan APK Minecraft milikmu sendiri.",
             color = Muted,
             fontSize = 13.sp,
             modifier = Modifier.padding(top = 6.dp, bottom = 12.dp),
         )
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+
+        Panel {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text("Minecraft Runtime", color = Fg, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                if (runtime?.isPrepared == true) Badge("APK siap", good = true) else Badge("Belum diimpor")
+            }
+            if (runtime == null) {
+                Text(
+                    "Pilih base APK dan split APK Minecraft dari penyimpanan. File disalin ke ruang privat Slime dan diperiksa sebelum digunakan.",
+                    color = Muted,
+                    fontSize = 12.sp,
+                )
+            } else {
+                Text(
+                    "${runtime!!.manifest.versionName} · ${runtime!!.manifest.abi} · ${runtime!!.manifest.apkFiles.size} APK",
+                    color = Fg,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    "Native library: ${runtime!!.manifest.nativeLibraries.size} · SHA-256 tersimpan · ${if (runtime!!.isPrepared) "libminecraftpe.so ditemukan" else "runtime tidak lengkap"}",
+                    color = Muted,
+                    fontSize = 11.sp,
+                )
+                Text(
+                    "Paket sudah disiapkan, tetapi Java/GameActivity Minecraft belum terintegrasi sehingga belum dapat dimainkan di dalam Slime.",
+                    color = Muted,
+                    fontSize = 11.sp,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = onImportMinecraft,
+                    enabled = !busy,
+                    colors = ButtonDefaults.buttonColors(containerColor = SlimeGreen, contentColor = Ink),
+                    shape = RoundedCornerShape(8.dp),
+                ) {
+                    Text(if (runtime == null) "Impor APK" else "Impor ulang", fontWeight = FontWeight.SemiBold)
+                }
+                if (runtime != null) {
+                    OutlinedButton(onClick = onOpenRuntime, enabled = !busy, shape = RoundedCornerShape(8.dp)) {
+                        Text("Periksa runtime", color = Fg)
+                    }
+                    OutlinedButton(onClick = { vm.removeMinecraftRuntime() }, enabled = !busy, shape = RoundedCornerShape(8.dp)) {
+                        Text("Hapus", color = Fg)
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+        LazyColumn(
+            Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
             items(versions, key = { it.id }) { v ->
                 val active = v.id == activeId
                 Panel {
