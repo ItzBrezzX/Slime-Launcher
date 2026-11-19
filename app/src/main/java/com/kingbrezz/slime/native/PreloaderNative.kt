@@ -87,11 +87,15 @@ object PreloaderNative {
 
     // ---------------------------------------------------------------- lifecycle
 
-    fun init(versionId: String): Boolean = guard(false) { nativeInit(versionId) }
+    fun init(versionId: String): Boolean {
+        if (!libraryLoaded && !ensureLoaded()) return false
+        return guard(false) { nativeInit(versionId) }
+    }
 
     fun shutdown() = guard(Unit) { nativeShutdown() }
 
     fun status(): Status {
+        if (!libraryLoaded) ensureLoaded()
         if (!libraryLoaded) {
             return Status("Error", "", "native library not loaded: ${loadError ?: "unknown"}", 0, 0, 0, 0, false)
         }
@@ -113,6 +117,7 @@ object PreloaderNative {
     }
 
     fun libraryVersion(): String {
+        if (!libraryLoaded) ensureLoaded()
         if (!libraryLoaded) return "unavailable"
         return guard("error") { nativeLibraryVersion() }
     }
