@@ -243,6 +243,9 @@ class SlimeRepository(context: Context) {
             versionId = _activeVersionId.value,
             moduleFlags = flags,
             autoLaunchGame = _autoLaunchMc.value,
+            moduleValues = _moduleValues.value.mapValues { it.value.toDouble() },
+            signatureOverrides = _sigOverrides.value,
+            offsetOverrides = _offsetOverrides.value,
         )
         _lastInject.value = result
         result.lines.forEach { log(it) }
