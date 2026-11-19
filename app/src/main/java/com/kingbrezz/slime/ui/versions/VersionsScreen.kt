@@ -40,6 +40,8 @@ import com.kingbrezz.slime.ui.theme.SlimeGreen
 fun VersionsScreen(vm: SlimeViewModel) {
     val versions by vm.versions.collectAsState()
     val activeId by vm.activeVersionId.collectAsState()
+    val runtime by vm.installedRuntime.collectAsState()
+    val busy by vm.busy.collectAsState()
 
     Column(Modifier.fillMaxSize().background(Bg).padding(16.dp)) {
         SectionTitle("Versi", "Release & Preview")
@@ -49,6 +51,42 @@ fun VersionsScreen(vm: SlimeViewModel) {
             fontSize = 13.sp,
             modifier = Modifier.padding(top = 6.dp, bottom = 12.dp),
         )
+
+        Panel {
+            Text("MINECRAFT TERPASANG", color = Muted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            Text(
+                "Siapkan sumber runtime langsung dari Minecraft yang sudah terpasang. APK dan split APK dibaca lokal; tidak perlu dikirim ke chat.",
+                color = Fg,
+                fontSize = 13.sp,
+                modifier = Modifier.padding(top = 6.dp, bottom = 10.dp),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (runtime.ready) {
+                    Badge("Pustaka siap", good = true)
+                } else {
+                    Badge("Belum disiapkan", warn = true)
+                }
+                if (runtime.versionName.isNotBlank()) Badge(runtime.versionName)
+                if (runtime.abi.isNotBlank()) Badge(runtime.abi)
+            }
+            Button(
+                onClick = { vm.prepareInstalledMinecraft() },
+                enabled = !busy,
+                colors = ButtonDefaults.buttonColors(containerColor = SlimeGreen, contentColor = Ink),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+            ) {
+                Text(if (busy) "Menyiapkan..." else "Siapkan dari Minecraft terpasang", fontWeight = FontWeight.SemiBold)
+            }
+            Text(runtime.message, color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+            if (runtime.libraries.isNotEmpty()) {
+                Text(
+                    runtime.libraries.joinToString(" · "),
+                    color = Faint,
+                    fontSize = 10.sp,
+                )
+            }
+        }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(versions, key = { it.id }) { v ->
                 val active = v.id == activeId
