@@ -6,8 +6,8 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Process
-import android.provider.OpenableColumns
 import android.os.StatFs
+import android.provider.OpenableColumns
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.kingbrezz.slime.data.Catalog
@@ -127,6 +127,7 @@ class MinecraftRuntimeInstaller(context: Context) {
             if (versionCodes.size != 1 || versionNames.size != 1) {
                 throw IOException("Base APK dan split APK harus berasal dari versi Minecraft yang sama")
             }
+            verifyTrustedMinecraftSource(packageInfos[baseIndexes.single()])
 
             val abi = targetAbi()
             var extractedBytes = 0L
@@ -147,6 +148,9 @@ class MinecraftRuntimeInstaller(context: Context) {
                     "libminecraftpe.so tidak ditemukan untuk ABI $abi. " +
                         "Pastikan base APK dan split ABI Minecraft ikut dipilih."
                 )
+            }
+            copiedNames.keys.forEach { name ->
+                verifyElf(File(nativeDirectory, name), abi)
             }
 
             val apkNames = copiedApks.map { it.name }
@@ -228,6 +232,7 @@ class MinecraftRuntimeInstaller(context: Context) {
                     if (copied > remainingBudget || copied > MAX_TOTAL_APK_BYTES) {
                         throw IOException("Ukuran APK melewati batas impor")
                     }
+                    ensureFreeSpace()
                     output.write(buffer, 0, read)
                 }
                 output.fd.sync()
@@ -242,10 +247,126 @@ class MinecraftRuntimeInstaller(context: Context) {
         return if (Build.VERSION.SDK_INT >= 33) {
             app.packageManager.getPackageArchiveInfo(
                 apk.absolutePath,
-                PackageManager.PackageInfoFlags.of(PackageManager.GET_META_DATA.toLong()),
+                PackageManager.PackageInfoFlags.of(
+                    (PackageManager.GET_META_DATA or signingFlags()).toLong()
+                ),
             )
         } else {
-            app.packageManager.getPackageArchiveInfo(apk.absolutePath, PackageManager.GET_META_DATA)
+            app.packageManager.getPackageArchiveInfo(
+                apk.absolutePath,
+                PackageManager.GET_META_DATA or signingFlags(),
+            )
+        }
+    }
+
+    private fun signingFlags(): Int =
+        if (Build.VERSION.SDK_INT >= 28) PackageManager.GET_SIGNING_CERTIFICATES
+        else {
+            @Suppress("DEPRECATION")
+            PackageManager.GET_SIGNATURES
+        }
+
+    private fun verifyTrustedMinecraftSource(importedBase: PackageInfo) {
+        val pm = app.packageManager
+        val installed = try {
+            @Suppress("DEPRECATION")
+            if (Build.VERSION.SDK_INT >= 33) {
+                pm.getPackageInfo(
+                    Catalog.MC_PACKAGE,
+                    PackageManager.PackageInfoFlags.of(signingFlags().toLong()),
+                )
+            } else {
+                pm.getPackageInfo(Catalog.MC_PACKAGE, signingFlags())
+            }
+        } catch (_: PackageManager.NameNotFoundException) {
+            throw IOException(
+                "Minecraft resmi dari Google Play harus terpasang terlebih dahulu untuk verifikasi lisensi."
+            )
+        }
+
+        val installer = try {
+            if (Build.VERSION.SDK_INT >= 30) {
+                pm.getInstallSourceInfo(Catalog.MC_PACKAGE).installingPackageName
+            } else {
+                @Suppress("DEPRECATION")
+                pm.getInstallerPackageName(Catalog.MC_PACKAGE)
+            }
+        } catch (_: Throwable) {
+            null
+        }
+        if (installer != PLAY_STORE_PACKAGE) {
+            throw IOException(
+                "Sumber Minecraft terpasang tidak terverifikasi sebagai Google Play. " +
+                    "Pasang versi resmi melalui Play Store terlebih dahulu."
+            )
+        }
+
+        val importedCertificates = certificateDigests(importedBase, includeHistory = false)
+        val trustedCertificates = certificateDigests(installed, includeHistory = true)
+        if (importedCertificates.isEmpty() || trustedCertificates.isEmpty() ||
+            importedCertificates.none { it in trustedCertificates }
+        ) {
+            throw IOException(
+                "Sertifikat APK impor tidak cocok dengan Minecraft resmi yang terpasang. " +
+                    "Gunakan APK resmi dari rilis yang sama penerbitnya."
+            )
+        }
+    }
+
+    private fun certificateDigests(info: PackageInfo, includeHistory: Boolean): Set<String> {
+        val signatures = if (Build.VERSION.SDK_INT >= 28) {
+            val signingInfo = info.signingInfo ?: return emptySet()
+            if (includeHistory) signingInfo.signingCertificateHistory
+            else signingInfo.apkContentsSigners
+        } else {
+            @Suppress("DEPRECATION")
+            info.signatures
+        } ?: return emptySet()
+
+        return signatures.mapNotNull { signature ->
+            try {
+                MessageDigest.getInstance("SHA-256").digest(signature.toByteArray())
+                    .joinToString("") { "%02x".format(it) }
+            } catch (_: Throwable) {
+                null
+            }
+        }.toSet()
+    }
+
+    private fun verifyElf(file: File, abi: String) {
+        val expected = when (abi) {
+            "arm64-v8a" -> 183
+            "armeabi-v7a" -> 40
+            "x86_64" -> 62
+            "x86" -> 3
+            else -> throw IOException("ABI tidak dikenal: $abi")
+        }
+        val header = ByteArray(20)
+        file.inputStream().use { input ->
+            var offset = 0
+            while (offset < header.size) {
+                val read = input.read(header, offset, header.size - offset)
+                if (read < 0) throw IOException("ELF header terpotong: ${file.name}")
+                offset += read
+            }
+        }
+        val validMagic = header[0] == 0x7f.toByte() &&
+            header[1] == 'E'.code.toByte() &&
+            header[2] == 'L'.code.toByte() &&
+            header[3] == 'F'.code.toByte()
+        val expectedClass = if (abi == "arm64-v8a" || abi == "x86_64") 2 else 1
+        val elfClass = header[4].toInt() and 0xff
+        val machine = (header[18].toInt() and 0xff) or
+            ((header[19].toInt() and 0xff) shl 8)
+        if (!validMagic || elfClass != expectedClass || machine != expected) {
+            throw IOException("ELF ABI tidak cocok pada ${file.name} (expected $abi)")
+        }
+    }
+
+    private fun ensureFreeSpace() {
+        val available = StatFs(app.filesDir.absolutePath).availableBytes
+        if (available < MIN_FREE_SPACE_BYTES) {
+            throw IOException("Penyimpanan hampir habis. Kosongkan setidaknya 64 MB lalu coba lagi.")
         }
     }
 
@@ -333,5 +454,7 @@ class MinecraftRuntimeInstaller(context: Context) {
         private const val MAX_TOTAL_APK_BYTES = 2_500_000_000L
         private const val MAX_NATIVE_FILE_BYTES = 512_000_000L
         private const val MAX_TOTAL_NATIVE_BYTES = 1_500_000_000L
+        private const val MIN_FREE_SPACE_BYTES = 64L * 1024L * 1024L
+        private const val PLAY_STORE_PACKAGE = "com.android.vending"
     }
 }
