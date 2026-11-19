@@ -32,6 +32,7 @@ object RuntimeHostClient {
         val sigTotal: Int = 0,
         val hooksActive: Int = 0,
         val hooksPending: Int = 0,
+        val installedHooks: Int = 0,
         val canInject: Boolean = false,
         val targetFound: Boolean = false,
         val targetBase: String = "0x0",
@@ -59,6 +60,8 @@ object RuntimeHostClient {
         }
         return transact(context, RuntimeHostProtocol.START, input)
     }
+
+    fun installHooks(context: Context): Snapshot = transact(context, RuntimeHostProtocol.INSTALL_HOOKS, Bundle())
 
     fun shutdown(context: Context): Snapshot = transact(context, RuntimeHostProtocol.SHUTDOWN, Bundle())
 
@@ -119,6 +122,7 @@ object RuntimeHostClient {
                 sigTotal = data.getInt("sigTotal"),
                 hooksActive = data.getInt("hooksActive"),
                 hooksPending = data.getInt("hooksPending"),
+                installedHooks = data.getInt("installedHooks"),
                 canInject = data.getBoolean("canInject"),
                 targetFound = data.getBoolean("targetFound"),
                 targetBase = data.getString("targetBase") ?: "0x0",
