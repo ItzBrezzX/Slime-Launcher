@@ -1,8 +1,10 @@
 #include "hook_registry.hpp"
 #include "signature_manager.hpp"
 #include "slime_log.hpp"
-#include <shadowhook.h>
 #include <mutex>
+#ifdef __ANDROID__
+#include <shadowhook.h>
+#endif
 
 namespace slime {
 
@@ -53,6 +55,7 @@ void* HookRegistry::originalFor(const std::string& name) const {
 }
 
 bool HookRegistry::initializeBackend() {
+#ifdef __ANDROID__
     static std::once_flag once;
     static bool ready = false;
     std::call_once(once, [] {
@@ -66,6 +69,10 @@ bool HookRegistry::initializeBackend() {
         }
     });
     return ready;
+#else
+    SLOG_W("ShadowHook is Android-only; native host tests do not install hooks");
+    return false;
+#endif
 }
 
 void HookRegistry::resolveFromSignatures() {
@@ -125,6 +132,7 @@ bool HookRegistry::tryInstall(const std::string& name) {
             h.reason = "ShadowHook backend belum siap";
             return false;
         }
+#ifdef __ANDROID__
         h.original = nullptr;
         h.stub = shadowhook_hook_func_addr(
             reinterpret_cast<void*>(h.target),
@@ -143,6 +151,11 @@ bool HookRegistry::tryInstall(const std::string& name) {
             h.original = nullptr;
             return false;
         }
+#else
+        h.status = HookStatus::Failed;
+        h.reason = "ShadowHook hanya tersedia pada Android";
+        return false;
+#endif
         h.status = HookStatus::Active;
         h.reason = "ShadowHook inline hook active";
         SLOG_I("hook %s installed at %p", name.c_str(), reinterpret_cast<void*>(h.target));
@@ -163,11 +176,13 @@ int HookRegistry::installAll() {
 void HookRegistry::reset() {
     for (auto& h : hooks_) {
         if (h.stub != nullptr) {
+#ifdef __ANDROID__
             const int result = shadowhook_unhook(h.stub);
             if (result != 0) {
                 const int error = shadowhook_get_errno();
                 SLOG_W("hook %s unhook failed: %s", h.name.c_str(), shadowhook_to_errmsg(error));
             }
+#endif
             h.stub = nullptr;
             h.original = nullptr;
         }
