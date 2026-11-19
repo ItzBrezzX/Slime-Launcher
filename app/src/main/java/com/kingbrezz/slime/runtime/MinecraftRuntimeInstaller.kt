@@ -77,11 +77,53 @@ class MinecraftRuntimeInstaller(context: Context) {
     fun importApks(uris: List<Uri>): ImportedMinecraftRuntime {
         require(uris.isNotEmpty()) { "Pilih APK Minecraft terlebih dahulu" }
         require(uris.size <= MAX_APK_COUNT) { "Maksimal $MAX_APK_COUNT file APK per impor" }
+        return importWithSource { apkDirectory ->
+            var totalInputBytes = 0L
+            uris.mapIndexed { index, uri ->
+                val displayName = displayName(uri)
+                if (!displayName.endsWith(".apk", ignoreCase = true)) {
+                    throw IOException("File '$displayName' bukan APK. Pilih base APK dan split APK, bukan file XAPK/APKS.")
+                }
+                val destination = File(apkDirectory, "package-$index.apk")
+                val copied = copyUri(uri, destination, MAX_TOTAL_APK_BYTES - totalInputBytes)
+                totalInputBytes += copied
+                destination
+            }
+        }
+    }
 
+    /**
+     * Copies the installed Google Play Minecraft base and split APKs.
+     * This is the preferred trusted source; no package installation is done.
+     */
+    @Synchronized
+    fun importInstalledMinecraft(): ImportedMinecraftRuntime {
+        return importWithSource { apkDirectory ->
+            val installed = installedPackageInfo()
+            verifyTrustedMinecraftSource(installed)
+            val appInfo = installed.applicationInfo
+                ?: throw IOException("ApplicationInfo Minecraft tidak tersedia")
+            val paths = buildList {
+                appInfo.sourceDir?.takeIf { it.isNotBlank() }?.let(::add)
+                appInfo.splitSourceDirs?.forEach { path ->
+                    path?.takeIf { it.isNotBlank() }?.let(::add)
+                }
+            }.distinct()
+            if (paths.isEmpty()) throw IOException("File APK Minecraft terpasang tidak ditemukan")
+            paths.mapIndexed { index, path ->
+                val source = File(path)
+                if (!source.isFile) throw IOException("APK Minecraft tidak ditemukan: $path")
+                val destination = File(apkDirectory, "package-$index.apk")
+                copyFile(source, destination, MAX_TOTAL_APK_BYTES)
+                destination
+            }
+        }
+    }
+
+    private fun importWithSource(copySource: (File) -> List<File>): ImportedMinecraftRuntime {
         if (!root.exists() && !root.mkdirs()) {
             throw IOException("Tidak bisa membuat direktori runtime Slime")
         }
-
         val stage = File(root, ".stage-${UUID.randomUUID()}")
         if (!stage.mkdirs()) throw IOException("Tidak bisa membuat direktori staging")
         try {
@@ -91,20 +133,9 @@ class MinecraftRuntimeInstaller(context: Context) {
                 throw IOException("Tidak bisa menyiapkan direktori APK/native")
             }
 
-            val copiedApks = mutableListOf<File>()
-            var totalInputBytes = 0L
-            uris.forEachIndexed { index, uri ->
-                val displayName = displayName(uri)
-                if (!displayName.endsWith(".apk", ignoreCase = true)) {
-                    throw IOException("File '$displayName' bukan APK. Pilih base APK dan split APK, bukan file XAPK/APKS.")
-                }
-                val destination = File(apkDirectory, "package-$index.apk")
-                val copied = copyUri(uri, destination, MAX_TOTAL_APK_BYTES - totalInputBytes)
-                totalInputBytes += copied
-                if (totalInputBytes > MAX_TOTAL_APK_BYTES) {
-                    throw IOException("Total APK melebihi batas impor yang diizinkan")
-                }
-                copiedApks += destination
+            val copiedApks = copySource(apkDirectory)
+            if (copiedApks.isEmpty() || copiedApks.size > MAX_APK_COUNT) {
+                throw IOException("Jumlah APK sumber tidak valid")
             }
 
             val packageInfos = copiedApks.map { apk ->
@@ -231,6 +262,47 @@ class MinecraftRuntimeInstaller(context: Context) {
                     copied += read
                     if (copied > remainingBudget || copied > MAX_TOTAL_APK_BYTES) {
                         throw IOException("Ukuran APK melewati batas impor")
+                    }
+                    ensureFreeSpace()
+                    output.write(buffer, 0, read)
+                }
+                output.fd.sync()
+            }
+        }
+        if (copied == 0L) throw IOException("File APK kosong")
+        return copied
+    }
+
+    private fun installedPackageInfo(): PackageInfo {
+        val pm = app.packageManager
+        return try {
+            @Suppress("DEPRECATION")
+            if (Build.VERSION.SDK_INT >= 33) {
+                pm.getPackageInfo(
+                    Catalog.MC_PACKAGE,
+                    PackageManager.PackageInfoFlags.of(signingFlags().toLong()),
+                )
+            } else {
+                pm.getPackageInfo(Catalog.MC_PACKAGE, signingFlags())
+            }
+        } catch (_: PackageManager.NameNotFoundException) {
+            throw IOException(
+                "Minecraft resmi dari Google Play harus terpasang terlebih dahulu untuk verifikasi lisensi."
+            )
+        }
+    }
+
+    private fun copyFile(source: File, destination: File, remainingBudget: Long): Long {
+        var copied = 0L
+        source.inputStream().use { input ->
+            FileOutputStream(destination).use { output ->
+                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    copied += read
+                    if (copied > remainingBudget || copied > MAX_TOTAL_APK_BYTES) {
+                        throw IOException("Total APK melebihi batas impor")
                     }
                     ensureFreeSpace()
                     output.write(buffer, 0, read)
