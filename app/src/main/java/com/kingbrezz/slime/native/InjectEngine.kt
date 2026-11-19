@@ -166,7 +166,6 @@ class InjectEngine(private val context: Context) {
 
         // --- AttachAttempt ---
         log("phase=AttachAttempt")
-        st = PreloaderNative.status()
         val attach = attemptAttach(st, installed, log)
         log("attach=${attach.first} detail=${attach.second}")
 
@@ -193,8 +192,8 @@ class InjectEngine(private val context: Context) {
         val can = st.canInject && attach.first
         val summary = when {
             !installed -> "Minecraft tidak ada — sesi demo saja"
-            !st.canInject -> "Preloader Degraded (sig ${st.sigResolved}/${st.sigTotal}) — isi pattern RE dulu"
-            !attach.first -> "Game diluncurkan; attach in-process belum tersedia di stock MC"
+            !st.canInject -> "Runtime host Degraded (sig ${st.sigResolved}/${st.sigTotal}) — target game belum co-load"
+            !attach.first -> "Runtime host Slime aktif; Minecraft resmi tetap proses terpisah"
             else -> "Pipeline Ready — hooks dapat diinstall"
         }
         log("DONE summary=$summary")
