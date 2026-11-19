@@ -55,9 +55,11 @@ Isinya, semua terhubung ke native lewat JNI:
 ## Minecraft APK Preparation
 
 The Versions screen can import a user-provided Minecraft base APK plus its
-matching split APKs. Slime checks the package/version, chooses the matching
-process ABI, extracts the native libraries, requires `libminecraftpe.so`,
-and stores the package and SHA-256 manifest in app-private storage.
+matching split APKs. Slime checks the package/version and requires the installed Google Play
+Minecraft package with a matching signing certificate. It chooses the
+matching process ABI, validates each extracted ELF library, requires
+`libminecraftpe.so`, and stores the package and SHA-256 manifest in
+app-private storage.
 
 The `MinecraftRuntimeActivity` currently provides import diagnostics. It is
 not yet a playable game Activity: the Mojang Java/GameActivity compatibility
