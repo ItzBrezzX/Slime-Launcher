@@ -61,6 +61,14 @@ android {
         prefab = true
     }
     packaging {
+        jniLibs {
+            // Keep only the licensed gxcore runtime bridge from Levi's bundled native libraries.
+            excludes += listOf(
+                "**/libPlayFabMultiplayer.so",
+                "**/libinbuiltmods.so",
+                "**/libmaesdk.so",
+            )
+        }
         resources {
             excludes += listOf(
                 "/META-INF/{AL2.0,LGPL2.1}",
