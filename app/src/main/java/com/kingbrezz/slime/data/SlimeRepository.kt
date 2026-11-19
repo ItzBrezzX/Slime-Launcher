@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import com.kingbrezz.slime.native.InjectEngine
 import com.kingbrezz.slime.native.PreloaderNative
+import com.kingbrezz.slime.native.MinecraftInstalledSource
 import kotlinx.coroutines.flow.update
 
 class SlimeRepository(context: Context) {
@@ -17,6 +18,11 @@ class SlimeRepository(context: Context) {
     private val prefs = app.getSharedPreferences("slime_v1", Context.MODE_PRIVATE)
     private val gson = Gson()
     private val injectEngine = InjectEngine(app)
+
+    private val _installedRuntime = MutableStateFlow(
+        MinecraftInstalledSource.RuntimeStatus(false, "Minecraft belum disiapkan")
+    )
+    val installedRuntime: StateFlow<MinecraftInstalledSource.RuntimeStatus> = _installedRuntime.asStateFlow()
 
     private val _lastInject = MutableStateFlow<InjectEngine.Result?>(null)
     val lastInject: StateFlow<InjectEngine.Result?> = _lastInject.asStateFlow()
@@ -230,6 +236,18 @@ class SlimeRepository(context: Context) {
         } catch (_: PackageManager.NameNotFoundException) {
             false
         }
+    }
+
+    /** Read installed Minecraft APK/splits and stage required native libraries locally. */
+    fun prepareInstalledMinecraft(): MinecraftInstalledSource.RuntimeStatus {
+        val result = MinecraftInstalledSource.prepare(app)
+        _installedRuntime.value = result
+        log(result.message)
+        if (result.ready) {
+            log("Minecraft " + result.versionName + " · " + result.abi + " · " + result.libraries.size + " library siap")
+        }
+        flash(result.message)
+        return result
     }
 
     /** Launch official Minecraft Bedrock if installed. Returns true if intent fired. */
