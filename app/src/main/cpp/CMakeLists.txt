@@ -35,9 +35,3 @@ target_compile_options(slime_preloader PRIVATE
     -fno-rtti
 )
 
-# LeviLauncher Android Preloader. It is packaged separately as libpreloader.so;
-# MainActivity's Activity manifest metadata will select it at launch time.
-add_subdirectory(
-    "${CMAKE_CURRENT_SOURCE_DIR}/../../../../third_party/preloader-android"
-    "${CMAKE_CURRENT_BINARY_DIR}/levi-preloader"
-)
