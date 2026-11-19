@@ -150,6 +150,230 @@ object MinecraftInstalledSource {
         )
     }
 
+
+    /**
+     * Extract required game-native libraries to Slime-private storage from the installed
+     * package APK and split APKs. This prepares files only; it does not load Minecraft.
+     */
+    fun prepare(context: Context): RuntimeStatus {
+        val info = when (val result = inspect(context)) {
+            is Inspection.Ready -> result.info
+            is Inspection.Unavailable -> return RuntimeStatus(false, result.reason)
+        }
+        return try {
+            val versionDirectory = safeVersion(info.versionName, info.versionCode)
+            val directory = File(context.applicationContext.filesDir,
+                "minecraft_runtime/" + info.deviceAbi + "/" + versionDirectory)
+            if (!directory.exists() && !directory.mkdirs()) {
+                throw IOException("Tidak bisa membuat direktori runtime")
+            }
+
+            val required = requiredLibraries(info.versionName)
+            val optional = listOf("libHttpClient.Android.so")
+            val manifest = buildManifest(info, required, optional)
+            val marker = File(directory, ".slime-runtime-manifest")
+            val cached = try { marker.isFile && marker.readText() == manifest } catch (_: Throwable) { false }
+            val validCache = cached && required.all { name ->
+                val file = File(directory, name)
+                file.isFile && file.length() > 0L && isElfForAbi(file, info.deviceAbi)
+            }
+
+            if (!validCache) {
+                val missing = required.filterNot { name ->
+                    val target = File(directory, name)
+                    if (target.isFile && target.length() > 0L && isElfForAbi(target, info.deviceAbi)) {
+                        true
+                    } else {
+                        stageLibrary(info, name, target)
+                    }
+                }
+                if (missing.isNotEmpty()) {
+                    throw IOException("Library wajib tidak ditemukan untuk " + info.deviceAbi + ": " + missing.joinToString())
+                }
+
+                optional.forEach { name ->
+                    val target = File(directory, name)
+                    if (!target.isFile || target.length() == 0L) stageLibrary(info, name, target)
+                }
+
+                val temporary = File(directory, ".slime-runtime-manifest.tmp")
+                temporary.writeText(manifest)
+                if (marker.exists() && !marker.delete()) {
+                    temporary.delete()
+                    throw IOException("Gagal memperbarui manifest runtime")
+                }
+                if (!temporary.renameTo(marker)) {
+                    temporary.delete()
+                    throw IOException("Gagal menerbitkan manifest runtime")
+                }
+            }
+
+            val staged = (required + optional).filter { name ->
+                val file = File(directory, name)
+                file.isFile && file.length() > 0L
+            }
+            RuntimeStatus(
+                ready = required.all { name ->
+                    val file = File(directory, name)
+                    file.isFile && file.length() > 0L && isElfForAbi(file, info.deviceAbi)
+                },
+                message = if (validCache) "Cache runtime Minecraft sudah cocok"
+                    else "Pustaka Minecraft berhasil disiapkan secara lokal",
+                versionName = info.versionName,
+                abi = info.deviceAbi,
+                directory = directory.absolutePath,
+                libraries = staged,
+                reusedCache = validCache,
+            )
+        } catch (error: Throwable) {
+            RuntimeStatus(
+                ready = false,
+                message = "Persiapan runtime gagal: " + (error.message ?: error.javaClass.simpleName),
+                versionName = info.versionName,
+                abi = info.deviceAbi,
+            )
+        }
+    }
+
+    private fun requiredLibraries(versionName: String): List<String> = buildList {
+        add("libc++_shared.so")
+        add("libfmod.so")
+        add("libMediaDecoders_Android.so")
+        if (versionAtLeast(versionName, "1.26.70.0")) add("libMallocRedirect.so")
+        add("libminecraftpe.so")
+    }
+
+    private fun versionAtLeast(raw: String, minimum: String): Boolean {
+        fun parse(value: String): List<Long>? {
+            val normalized = value.trim().removePrefix("v")
+                .let { if (it.startsWith("26.")) "1." + it else it }
+            val tokens = normalized.split(".")
+            if (tokens.isEmpty()) return null
+            val values = mutableListOf<Long>()
+            for (token in tokens) {
+                val number = token.toLongOrNull() ?: return null
+                values.add(number)
+            }
+            return values
+        }
+        val current = parse(raw) ?: return false
+        val target = parse(minimum) ?: return false
+        for (index in 0 until maxOf(current.size, target.size)) {
+            val left = current.getOrElse(index) { 0L }
+            val right = target.getOrElse(index) { 0L }
+            if (left != right) return left > right
+        }
+        return true
+    }
+
+    private fun stageLibrary(info: Info, name: String, target: File): Boolean {
+        val nativeFile = info.nativeLibraryDir.takeIf { it.isNotBlank() }?.let { File(it, name) }
+        if (nativeFile != null && nativeFile.isFile && nativeFile.canRead()) {
+            try {
+                FileInputStream(nativeFile).use { input ->
+                    publishLibrary(input, nativeFile.length(), target, info.deviceAbi)
+                }
+                return true
+            } catch (_: Throwable) {
+                // Retry from the installed APK/split archive.
+            }
+        }
+
+        val entryName = "lib/" + info.deviceAbi + "/" + name
+        val paths = listOf(info.baseApkPath) + info.splitApkPaths
+        for (path in paths) {
+            try {
+                val copied = ZipFile(path).use { zip ->
+                    val entry = zip.getEntry(entryName)
+                    if (entry == null) {
+                        false
+                    } else {
+                        zip.getInputStream(entry).use { input ->
+                            publishLibrary(input, entry.size, target, info.deviceAbi)
+                        }
+                        true
+                    }
+                }
+                if (copied) return true
+            } catch (_: Throwable) {
+                // A different split may contain this library.
+            }
+        }
+        return false
+    }
+
+    private fun publishLibrary(
+        input: java.io.InputStream,
+        expectedSize: Long,
+        target: File,
+        abi: String,
+    ) {
+        val temp = File(target.parentFile, target.name + ".tmp")
+        temp.delete()
+        try {
+            val copied = FileOutputStream(temp).use { output ->
+                val count = input.copyTo(output, 256 * 1024)
+                output.fd.sync()
+                count
+            }
+            if (expectedSize >= 0L && copied != expectedSize) {
+                throw IOException("Ukuran " + target.name + " tidak cocok (" + copied + "/" + expectedSize + ")")
+            }
+            if (!isElfForAbi(temp, abi)) throw IOException(target.name + " bukan ELF " + abi)
+            if (target.exists() && !target.delete()) throw IOException("Gagal mengganti " + target.name)
+            if (!temp.renameTo(target)) throw IOException("Gagal menerbitkan " + target.name)
+        } finally {
+            temp.delete()
+        }
+    }
+
+    private fun isElfForAbi(file: File, abi: String): Boolean {
+        return try {
+            FileInputStream(file).use { input ->
+                val header = ByteArray(20)
+                var offset = 0
+                while (offset < header.size) {
+                    val count = input.read(header, offset, header.size - offset)
+                    if (count < 0) return false
+                    offset += count
+                }
+                if (header[0] != 0x7f.toByte() || header[1] != 'E'.code.toByte() ||
+                    header[2] != 'L'.code.toByte() || header[3] != 'F'.code.toByte()
+                ) return false
+                val machine = (header[18].toInt() and 0xff) or ((header[19].toInt() and 0xff) shl 8)
+                when (abi) {
+                    "arm64-v8a" -> machine == 183
+                    "armeabi-v7a" -> machine == 40
+                    "x86_64" -> machine == 62
+                    "x86" -> machine == 3
+                    else -> false
+                }
+            }
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
+    private fun safeVersion(version: String, code: Long): String =
+        (if (version.isBlank()) code.toString() else version)
+            .replace(Regex("[^A-Za-z0-9._-]"), "_")
+            .take(48)
+
+    private fun buildManifest(info: Info, required: List<String>, optional: List<String>): String = buildString {
+        append("package=").append(info.packageName).append('\n')
+        append("version=").append(info.versionName).append('\n')
+        append("versionCode=").append(info.versionCode).append('\n')
+        append("lastUpdate=").append(info.lastUpdateTime).append('\n')
+        append("abi=").append(info.deviceAbi).append('\n')
+        (listOf(info.baseApkPath) + info.splitApkPaths).forEach { path ->
+            val file = File(path)
+            append("apk=").append(file.name).append('|')
+                .append(file.length()).append('|').append(file.lastModified()).append('\n')
+        }
+        required.forEach { append("required=").append(it).append('\n') }
+        optional.forEach { append("optional=").append(it).append('\n') }
+    }
+
     private fun getPackageInfo(packageManager: PackageManager): PackageInfo {
         return if (Build.VERSION.SDK_INT >= 33) {
             packageManager.getPackageInfo(
