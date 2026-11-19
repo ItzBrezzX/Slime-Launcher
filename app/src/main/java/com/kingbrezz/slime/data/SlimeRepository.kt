@@ -93,6 +93,21 @@ class SlimeRepository(context: Context) {
         }
     }
 
+    /** Imports the installed, Play-verified Minecraft package and its split APKs. */
+    fun importInstalledMinecraft() {
+        try {
+            val runtime = runtimeInstaller.importInstalledMinecraft()
+            _runtimeInstall.value = runtime
+            val message = "Minecraft resmi ${runtime.manifest.versionName} disiapkan · ABI ${runtime.manifest.abi}"
+            log(message)
+            flash(message + ". Lapisan GameActivity masih perlu diintegrasikan.")
+        } catch (error: Throwable) {
+            val message = error.message ?: error.javaClass.simpleName
+            log("Persiapan Minecraft resmi gagal: $message")
+            flash("Persiapan gagal: $message")
+        }
+    }
+
     fun removeMinecraftRuntime() {
         if (runtimeInstaller.removeCurrent()) {
             _runtimeInstall.value = null
