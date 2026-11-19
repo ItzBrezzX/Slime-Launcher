@@ -133,7 +133,10 @@ class SlimeViewModel(private val repo: SlimeRepository) : ViewModel() {
     fun deleteConfig(id: String) = repo.deleteConfig(id)
     fun toggleLibrary(id: String) = repo.toggleLibrary(id)
     fun launchMinecraft(): Boolean = repo.launchMinecraft()
-    fun runInjectPipeline() = repo.runInjectPipeline()
+    fun runInjectPipeline(onComplete: () -> Unit = {}) = work {
+        repo.runInjectPipeline()
+        viewModelScope.launch(Dispatchers.Main) { onComplete() }
+    }
     val lastInject = repo.lastInject
     fun log(text: String) = repo.log(text)
     fun initPreloader(): String = repo.initPreloader()
