@@ -53,6 +53,9 @@ class InjectEngine(private val context: Context) {
         versionId: String,
         moduleFlags: Map<String, Boolean>,
         autoLaunchGame: Boolean,
+        moduleValues: Map<String, Double> = emptyMap(),
+        signatureOverrides: Map<String, String> = emptyMap(),
+        offsetOverrides: Map<String, Int> = emptyMap(),
     ): Result {
         val lines = mutableListOf<String>()
         val log: (String) -> Unit = { s ->
@@ -100,6 +103,52 @@ class InjectEngine(private val context: Context) {
         moduleFlags.forEach { (id, on) -> PreloaderNative.setModule(id, on) }
         log("modules enabled=${moduleFlags.count { it.value }} native=${PreloaderNative.moduleFlags().count { it.value }}")
 
+        // --- Dedicated runtime host process ---
+        log("phase=RuntimeHost process=:runtime")
+        val host = RuntimeHostClient.start(
+            context = context,
+            versionId = versionId,
+            moduleFlags = moduleFlags,
+            moduleValues = moduleValues,
+            signatureOverrides = signatureOverrides,
+            offsetOverrides = offsetOverrides,
+        )
+        log("host ABI=${host.abi} libraryLoaded=${host.libraryLoaded} version=${host.libraryVersion}")
+        log("host libraries=${host.libraries.size} dir=${host.libraryDirectory}")
+        host.libraries.forEach { log("host lib=$it") }
+        if (!host.libraryLoaded) {
+            val err = host.error ?: host.message.ifBlank { "runtime host could not load native library" }
+            log("FAIL runtime host: $err")
+            return Result(
+                phase = Phase.Failed,
+                ok = false,
+                canInject = false,
+                minecraftInstalled = isMinecraftInstalled(),
+                minecraftLaunched = false,
+                libraryLoaded = false,
+                sigResolved = 0,
+                sigTotal = 0,
+                hooksActive = 0,
+                hooksPending = 0,
+                lines = lines,
+                summary = "Runtime host gagal: $err",
+            )
+        }
+        st = PreloaderNative.Status(
+            phase = host.phase,
+            versionId = host.versionId,
+            message = host.message,
+            sigResolved = host.sigResolved,
+            sigTotal = host.sigTotal,
+            hooksActive = host.hooksActive,
+            hooksPending = host.hooksPending,
+            canInject = host.canInject,
+            targetFound = host.targetFound,
+            targetBase = host.targetBase,
+        )
+        log("host preloader phase=${st.phase} msg=${st.message}")
+        log("host sig ${st.sigResolved}/${st.sigTotal} hooks active=${st.hooksActive} pending=${st.hooksPending}")
+
         // --- ProbeTarget ---
         log("phase=ProbeTarget pkg=${Catalog.MC_PACKAGE}")
         val installed = isMinecraftInstalled()
@@ -121,20 +170,24 @@ class InjectEngine(private val context: Context) {
         val attach = attemptAttach(st, installed, log)
         log("attach=${attach.first} detail=${attach.second}")
 
-        // Try install hooks only if canInject
-        if (st.canInject) {
-            listOf(
-                "ClientInstanceUpdate",
-                "ActorBaseTick",
-                "OptionsGamma",
-                "CameraFov",
-            ).forEach { name ->
-                val ok = PreloaderNative.tryInstallHook(name)
-                log("hook $name install=$ok")
-            }
-            st = PreloaderNative.status()
+        // Hook calls are sent to the runtime host, never to a different process.
+        if (st.canInject && attach.first) {
+            val hookResult = RuntimeHostClient.installHooks(context)
+            log("runtime host hooks installed=${hookResult.installedHooks} error=${hookResult.error ?: "-"}")
+            st = PreloaderNative.Status(
+                phase = hookResult.phase,
+                versionId = host.versionId,
+                message = hookResult.message,
+                sigResolved = hookResult.sigResolved,
+                sigTotal = hookResult.sigTotal,
+                hooksActive = hookResult.hooksActive,
+                hooksPending = hookResult.hooksPending,
+                canInject = hookResult.canInject,
+                targetFound = hookResult.targetFound,
+                targetBase = hookResult.targetBase,
+            )
         } else {
-            log("hooks gated: signatures unresolved atau bukan in-process co-load")
+            log("hooks gated: target game module not mapped in runtime host process")
         }
 
         val can = st.canInject && attach.first
@@ -148,7 +201,7 @@ class InjectEngine(private val context: Context) {
 
         return Result(
             phase = Phase.Done,
-            ok = initOk,
+            ok = initOk && host.ok,
             canInject = can,
             minecraftInstalled = installed,
             minecraftLaunched = launched,
