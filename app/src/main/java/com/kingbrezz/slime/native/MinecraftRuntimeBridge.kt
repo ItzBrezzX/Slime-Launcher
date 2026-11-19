@@ -20,6 +20,20 @@ object MinecraftRuntimeBridge {
         val message: String,
     )
 
+    /** Load the active version and settings directly from Slime's saved launcher config. */
+    @JvmStatic
+    fun onRuntimeReady(context: Context): Result {
+        val config = MinecraftRuntimeConfigProvider.read(context)
+        return onRuntimeReady(
+            context = context,
+            versionId = config.versionId,
+            moduleFlags = config.moduleFlags,
+            moduleValues = config.moduleValues,
+            signatureOverrides = config.signatureOverrides,
+            offsetOverrides = config.offsetOverrides,
+        )
+    }
+
     /**
      * Call only after the custom runtime has loaded Minecraft's native
      * libraries. The preloader library must be packaged by that runtime APK
@@ -103,6 +117,13 @@ object MinecraftRuntimeBridge {
             message = if (mapped) "Konfigurasi modul disinkronkan pada proses runtime" else
                 "Konfigurasi tersimpan; libminecraftpe.so belum terdeteksi pada proses runtime",
         )
+    }
+
+    /** Pull updated module toggles/values after the launcher UI changes them. */
+    @JvmStatic
+    fun syncFromLauncher(context: Context): Result {
+        val config = MinecraftRuntimeConfigProvider.read(context)
+        return syncModules(config.moduleFlags, config.moduleValues)
     }
 
     /**
