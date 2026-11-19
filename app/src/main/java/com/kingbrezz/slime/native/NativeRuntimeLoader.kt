@@ -15,7 +15,8 @@ object NativeRuntimeLoader {
 
     fun inspect(context: Context): Result {
         val supported = Build.SUPPORTED_ABIS.toList()
-        val abi = context.applicationInfo.primaryCpuAbi?.takeIf { it.isNotBlank() }\n            ?: supported.firstOrNull { it in setOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86") }\n            ?: Build.CPU_ABI.orEmpty()
+        val abi = context.applicationInfo.primaryCpuAbi?.takeIf { it.isNotBlank() }
+            ?: supported.firstOrNull { it in setOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86") }\n            ?: Build.CPU_ABI.orEmpty()
         val dir = context.applicationInfo.nativeLibraryDir?.let(::File) ?: File(context.applicationInfo.dataDir, "lib")
         val libraries = dir.listFiles().orEmpty().filter { it.isFile && it.extension == "so" }.sortedBy { it.name }.map { file ->
             val header = readElfHeader(file)
