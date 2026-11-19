@@ -40,6 +40,7 @@ import com.kingbrezz.slime.ui.theme.SlimeGreen
 fun VersionsScreen(
     vm: SlimeViewModel,
     onImportMinecraft: () -> Unit = {},
+    onImportInstalledMinecraft: () -> Unit = {},
     onOpenRuntime: () -> Unit = {},
 ) {
     val versions by vm.versions.collectAsState()
@@ -95,7 +96,16 @@ fun VersionsScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = SlimeGreen, contentColor = Ink),
                     shape = RoundedCornerShape(8.dp),
                 ) {
-                    Text(if (runtime == null) "Impor APK" else "Impor ulang", fontWeight = FontWeight.SemiBold)
+                    Text(if (runtime == null) "Pilih APK" else "Impor ulang", fontWeight = FontWeight.SemiBold)
+                }
+                if (runtime == null) {
+                    OutlinedButton(
+                        onClick = onImportInstalledMinecraft,
+                        enabled = !busy,
+                        shape = RoundedCornerShape(8.dp),
+                    ) {
+                        Text("Dari Play Store", color = Fg)
+                    }
                 }
                 if (runtime != null) {
                     OutlinedButton(onClick = onOpenRuntime, enabled = !busy, shape = RoundedCornerShape(8.dp)) {
