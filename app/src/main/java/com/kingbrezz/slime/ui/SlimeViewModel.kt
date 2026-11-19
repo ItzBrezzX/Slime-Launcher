@@ -32,6 +32,7 @@ data class NativeSnapshot(
 
 class SlimeViewModel(private val repo: SlimeRepository) : ViewModel() {
     val versions: StateFlow<List<McVersion>> = repo.versions
+    val installedRuntime = repo.installedRuntime
     val modules: StateFlow<Map<String, ModuleState>> = repo.modules
     val moduleValues: StateFlow<Map<String, Float>> = repo.moduleValues
     val sigOverrides: StateFlow<Map<String, String>> = repo.sigOverrides
@@ -133,6 +134,7 @@ class SlimeViewModel(private val repo: SlimeRepository) : ViewModel() {
     fun deleteConfig(id: String) = repo.deleteConfig(id)
     fun toggleLibrary(id: String) = repo.toggleLibrary(id)
     fun launchMinecraft(): Boolean = repo.launchMinecraft()
+    fun prepareInstalledMinecraft() = work { repo.prepareInstalledMinecraft() }
     fun runInjectPipeline() = repo.runInjectPipeline()
     val lastInject = repo.lastInject
     fun log(text: String) = repo.log(text)
