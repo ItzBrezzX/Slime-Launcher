@@ -1,8 +1,11 @@
 package com.kingbrezz.slime
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -28,6 +31,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.kingbrezz.slime.data.SlimeRepository
 import com.kingbrezz.slime.nav.Routes
+import com.kingbrezz.slime.runtime.MinecraftRuntimeActivity
 import com.kingbrezz.slime.ui.SlimeViewModel
 import com.kingbrezz.slime.ui.SlimeViewModelFactory
 import com.kingbrezz.slime.ui.components.BottomNav
@@ -50,6 +54,11 @@ class MainActivity : ComponentActivity() {
         setContent {
             SlimeTheme {
                 val vm: SlimeViewModel = viewModel(factory = SlimeViewModelFactory(repo))
+                val importMinecraftLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.OpenMultipleDocuments(),
+                ) { selected ->
+                    if (selected.isNotEmpty()) vm.importMinecraftApks(selected)
+                }
                 val nav = rememberNavController()
                 val snack = remember { SnackbarHostState() }
                 val toast by vm.toast.collectAsState()
@@ -105,7 +114,19 @@ class MainActivity : ComponentActivity() {
                                         onOpenConfigs = { nav.navigate(Routes.CONFIGS) },
                                     )
                                 }
-                                composable(Routes.VERSIONS) { VersionsScreen(vm) }
+                                composable(Routes.VERSIONS) {
+                                    VersionsScreen(
+                                        vm = vm,
+                                        onImportMinecraft = {
+                                            importMinecraftLauncher.launch(arrayOf("*/*"))
+                                        },
+                                        onOpenRuntime = {
+                                            startActivity(
+                                                Intent(this@MainActivity, MinecraftRuntimeActivity::class.java)
+                                            )
+                                        },
+                                    )
+                                }
                                 composable(Routes.MODULES) { ModulesScreen(vm) }
                                 composable(Routes.CONFIGS) { ConfigsScreen(vm) }
                                 composable(Routes.LIBRARY) { LibraryScreen(vm) }
