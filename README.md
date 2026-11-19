@@ -52,6 +52,18 @@ Isinya, semua terhubung ke native lewat JNI:
 | Alat | Uji pattern pada modul in-process, self-test native, daftar modul proses |
 | Log | Log launcher + salin |
 
+## Minecraft APK Preparation
+
+The Versions screen can import a user-provided Minecraft base APK plus its
+matching split APKs. Slime checks the package/version, chooses the matching
+process ABI, extracts the native libraries, requires `libminecraftpe.so`,
+and stores the package and SHA-256 manifest in app-private storage.
+
+The `MinecraftRuntimeActivity` currently provides import diagnostics. It is
+not yet a playable game Activity: the Mojang Java/GameActivity compatibility
+layer and game startup lifecycle are not included. Opening official Minecraft
+remains an external app launch in a separate process.
+
 ## Minecraft Runtime Integration
 
 `MinecraftRuntimeBridge` is the in-process API for a custom runtime that
