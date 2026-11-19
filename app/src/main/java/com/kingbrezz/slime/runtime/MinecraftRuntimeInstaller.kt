@@ -159,7 +159,15 @@ class MinecraftRuntimeInstaller(context: Context) {
             if (versionCodes.size != 1 || versionNames.size != 1) {
                 throw IOException("Base APK dan split APK harus berasal dari versi Minecraft yang sama")
             }
-            verifyTrustedMinecraftSource(packageInfos[baseIndexes.single()])
+            val basePackageInfo = packageInfos[baseIndexes.single()]
+            verifyTrustedMinecraftSource(basePackageInfo)
+            val baseCertificates = certificateDigests(basePackageInfo, includeHistory = false)
+            packageInfos.forEachIndexed { index, packageInfo ->
+                val splitCertificates = certificateDigests(packageInfo, includeHistory = false)
+                if (splitCertificates.isEmpty() || splitCertificates != baseCertificates) {
+                    throw IOException("Sertifikat split APK ke-${index + 1} tidak cocok dengan base APK")
+                }
+            }
 
             val abi = targetAbi()
             var extractedBytes = 0L
@@ -183,6 +191,18 @@ class MinecraftRuntimeInstaller(context: Context) {
             }
             copiedNames.keys.forEach { name ->
                 verifyElf(File(nativeDirectory, name), abi)
+            }
+            val requiredLibraries = listOf(
+                "libc++_shared.so",
+                "libfmod.so",
+                "libMediaDecoders_Android.so",
+                "libminecraftpe.so",
+            )
+            val missingLibraries = requiredLibraries.filter { name ->
+                !File(nativeDirectory, name).let { it.isFile && it.length() > 0L }
+            }
+            if (missingLibraries.isNotEmpty()) {
+                throw IOException("Native dependency Minecraft belum lengkap: ${missingLibraries.joinToString()}")
             }
 
             val apkNames = copiedApks.map { it.name }
