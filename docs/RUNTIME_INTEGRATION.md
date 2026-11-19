@@ -2,15 +2,17 @@
 
 ## Architecture
 
-Slime's native preloader must execute in the same process that owns the
-Minecraft runtime. Loading it in a separate launcher service cannot see
-`libminecraftpe.so` mapped by another Android process.
+Slime owns a dedicated Android process for its future game host:
+`MinecraftRuntimeActivity` is declared with `android:process=":game"`, so
+its native libraries are mapped in `com.kingbrezz.slime:game`. The process
+belongs to Slime and uses Slime's UID and private files directory. It is not
+the official Minecraft app process.
 
-LeviLauncher Android uses a launcher-owned Minecraft Activity and prepares
-the selected game package/runtime before entering the game. Slime currently
-does not contain that Activity, APK import path, or full game package manager.
-The integration bridge below is the process-local contract for that runtime
-once those parts are added.
+The imported official Minecraft package is staged in Slime's private storage.
+The native loader maps the selected package's ELF dependency graph in the
+`:game` process, then loads Slime's `libslime_preloader.so` and initializes
+the in-process scanner. This establishes the native process-local load path;
+it does not by itself create a playable game session.
 
 Reference architecture:
 - [LeviLauncher Android source](https://github.com/LiteLDev/LeviLauncher-Android)
@@ -31,7 +33,7 @@ split APKs for the same release. The importer:
   official app's current/history certificates;
 - requires exactly one base APK and consistent version metadata;
 - selects the ABI matching the Slime process bitness;
-- extracts only native `.so` files from `lib/<abi>/`;
+- extracts native `.so` files from `lib/<abi>/`;
 - requires `libminecraftpe.so`, `libc++_shared.so`, `libfmod.so`, and
   `libMediaDecoders_Android.so`;
 - validates ELF magic, bitness, and machine type for every extracted library;
@@ -44,11 +46,33 @@ split APKs for the same release. The importer:
 The importer does not install the APK, modify its signature, patch it, or
 bypass purchase/licensing checks. It only prepares files supplied by the user.
 
-`MinecraftRuntimeActivity` displays the imported package/version/ABI and
-native-library inventory. It is currently a preparation/diagnostic screen,
-not a playable Mojang game Activity. The optional "open official Minecraft"
-button launches the separately installed app and does not co-load the Slime
-preloader into it.
+## Loading native libraries in :game
+
+From `MinecraftRuntimeActivity`, tap **Muat .so ke proses :game**. The
+`MinecraftNativeLibraryLoader` then:
+
+1. Confirms the active runtime directory is Slime's private imported directory.
+2. Confirms package identity, process bitness, and matching ABI.
+3. Parses ELF program headers and `DT_NEEDED` entries from the imported
+   libraries.
+4. Builds a dependency-first load order for the private library dependencies.
+5. Loads the core set (`libc++_shared.so`, `libfmod.so`,
+   `libMediaDecoders_Android.so`, and `libminecraftpe.so`) with
+   `System.load(absolutePath)` in the `:game` process.
+6. Calls `MinecraftRuntimeBridge.onRuntimeReady(...)`, which loads
+   `libslime_preloader.so` from Slime's APK and checks whether
+   `libminecraftpe.so` is visible to the native process scanner.
+
+Only libraries extracted from the validated active Minecraft package are
+considered for this load plan. Android system libraries are left to the
+Android linker. If loading fails after one or more libraries have been mapped,
+the process cannot safely roll that mapping back; restart Slime before
+retrying.
+
+The Activity reports the process name/PID, ABI, loaded library names,
+preloader state, signature counts, and active hook count. A mapped
+`libminecraftpe.so` is evidence that the image is present in `:game`; it is
+not evidence that the Mojang game has initialized or is playable.
 
 ## Bridge API
 
@@ -66,22 +90,16 @@ launcher preferences:
 val result = MinecraftRuntimeBridge.onRuntimeReady(applicationContext)
 
 if (!result.gameLibraryMapped) {
-    // Do not claim co-load or attempt hooks.
     Log.w("SlimeRuntime", result.message)
 }
 ```
 
-For a separately packaged custom runtime, pass the values explicitly instead
-of relying on Slime's private preferences:
+For the current imported runtime, pass its actual package version:
 
 ```kotlin
 val result = MinecraftRuntimeBridge.onRuntimeReady(
     context = applicationContext,
-    versionId = selectedMinecraftVersion,
-    moduleFlags = currentModuleFlags,
-    moduleValues = currentModuleValues,
-    signatureOverrides = signatureOverrides,
-    offsetOverrides = offsetOverrides,
+    versionId = importedRuntime.manifest.versionName,
 )
 ```
 
@@ -115,16 +133,16 @@ MinecraftRuntimeBridge.onRuntimeStopping()
 
 ## Required call order
 
-1. Prepare the selected game package and its native dependencies.
-2. Load Minecraft's native runtime in the process that owns the game Activity.
-3. Confirm that `libminecraftpe.so` is mapped in that process.
-4. Call `MinecraftRuntimeBridge.onRuntimeReady(...)`.
-5. Sync module changes with `syncFromLauncher` or `syncModules`.
-6. Call `onRuntimeStopping` before tearing down the runtime.
+1. Import and validate the official Minecraft package and matching ABI.
+2. Start the Slime-owned `:game` process.
+3. Map the Minecraft ELF dependencies and `libminecraftpe.so` in that process.
+4. Load and initialize Slime's preloader with `MinecraftRuntimeBridge`.
+5. Enter the compatible Minecraft Java/GameActivity lifecycle (not implemented yet).
+6. Sync module settings and shut down the preloader from the owning runtime lifecycle.
 
 The bridge checks the current process with the native module scanner. Calling
-it from Slime's launcher process or after opening the official Minecraft app
-does not attach it to that app.
+it from the launcher UI process or after opening official Minecraft does not
+attach it to the official app.
 
 ## Current launcher behavior and limits
 
@@ -132,18 +150,23 @@ does not attach it to that app.
   app by launch intent.
 - The official Minecraft app is a separate Android package/process. Slime
   does not load native code into that process or bypass Android isolation.
-- The old separate `:runtime` diagnostic service has been removed; it could
-  not serve as the Minecraft host because it ran in a different process.
-- The current repository still lacks a licensed/user-supplied game APK import
-  path, a launcher-owned Minecraft Activity/runtime compatibility layer, and
-  the full per-version game package preparation used by a custom runtime.
-  Therefore the bridge is ready for the runtime integration point, but
-  end-to-end co-load is not available in this build.
+- `MinecraftRuntimeActivity` now runs in Slime's dedicated `:game` process
+  and can map the imported native library dependency graph there.
+- The `:game` Activity remains a diagnostic host, not Mojang's
+  `com.mojang.minecraftpe.MainActivity`. The compatible Java Activity,
+  asset/resource context, game storage setup, and full startup/shutdown
+  lifecycle are not implemented yet. Therefore this build does not start a
+  playable Minecraft session inside Slime.
+- Some Minecraft releases have version-specific bootstrap libraries and
+  startup requirements beyond the core ELF dependency graph. The new loader
+  does not claim full version-specific game initialization.
 - Signature entries and offsets are placeholders until verified for the
   exact Android Minecraft build.
 - The native hook registry deliberately refuses to report a hook as active
   until a real inline/trampoline backend has patched the target function.
 
-Do not treat a successful APK build, preloader load, or module-config sync as
-proof that in-game hooks are active. Verify `gameLibraryMapped`, signature
-resolution, and nonzero active hooks in the actual runtime process.
+Do not treat successful ELF mapping, preloader initialization, or
+module-config synchronization as proof that in-game hooks are active or
+that the game has started. Verify the process name, `gameLibraryMapped`,
+signature resolution, active hooks, and eventually the real game Activity
+lifecycle on a device.
