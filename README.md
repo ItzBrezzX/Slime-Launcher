@@ -52,6 +52,13 @@ Isinya, semua terhubung ke native lewat JNI:
 | Alat | Uji pattern pada modul in-process, self-test native, daftar modul proses |
 | Log | Log launcher + salin |
 
+## Native Runtime Loader
+
+The launch pipeline detects the device ABI, inventories packaged native libraries,
+checks the preloader ELF ABI, and loads `libslime_preloader.so` from the installed APK.
+Android's linker resolves declared shared-library dependencies. A missing or
+incompatible library is reported as an explicit runtime error.
+
 ## Preloader NDK
 
 Native library `libslime_preloader.so`:
