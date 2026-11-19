@@ -73,7 +73,7 @@ class RuntimeHostService : Service() {
         val valueIds = input.getStringArrayList(RuntimeHostProtocol.VALUE_IDS).orEmpty()
         val valueNumbers = input.getDoubleArray(RuntimeHostProtocol.VALUE_NUMBERS) ?: doubleArrayOf()
         valueIds.forEachIndexed { index, id ->
-            val split = id.indexOf('\u0000')
+            val split = id.indexOf('.')
             if (split > 0) PreloaderNative.setModuleValue(id.substring(0, split), id.substring(split + 1), valueNumbers.getOrElse(index) { 0.0 })
         }
 
