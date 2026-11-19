@@ -17,6 +17,9 @@ struct HookDesc {
     std::string sigName;      // key in SignatureManager
     HookStatus status = HookStatus::Pending;
     uintptr_t target = 0;
+    void* replacement = nullptr;
+    void* original = nullptr;
+    void* stub = nullptr;
     std::string reason;       // human-readable why (shown in the Mod Menu)
 };
 
@@ -33,6 +36,9 @@ public:
     static HookRegistry& instance();
 
     void registerHook(const std::string& name, const std::string& sigName);
+    void registerDetour(const std::string& name, void* replacement);
+    void* originalFor(const std::string& name) const;
+    bool initializeBackend();
     void resolveFromSignatures();
     HookStatus status(const std::string& name) const;
     int activeCount() const;
