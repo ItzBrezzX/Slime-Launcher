@@ -1,5 +1,6 @@
 package com.kingbrezz.slime.ui
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -32,6 +33,7 @@ data class NativeSnapshot(
 
 class SlimeViewModel(private val repo: SlimeRepository) : ViewModel() {
     val versions: StateFlow<List<McVersion>> = repo.versions
+    val runtimeInstall = repo.runtimeInstall
     val modules: StateFlow<Map<String, ModuleState>> = repo.modules
     val moduleValues: StateFlow<Map<String, Float>> = repo.moduleValues
     val sigOverrides: StateFlow<Map<String, String>> = repo.sigOverrides
@@ -111,6 +113,14 @@ class SlimeViewModel(private val repo: SlimeRepository) : ViewModel() {
     }
 
     // ------------------------------------------------------------ launcher actions
+
+    fun importMinecraftApks(uris: List<Uri>) = work {
+        repo.importMinecraftApks(uris)
+    }
+
+    fun removeMinecraftRuntime() = work {
+        repo.removeMinecraftRuntime()
+    }
 
     fun activeVersion(): McVersion? = repo.activeVersion()
     fun enabledModuleCount(): Int = repo.enabledModuleCount()
