@@ -64,8 +64,9 @@ bool HookRegistry::initializeBackend() {
         if (ready) {
             SLOG_I("ShadowHook %s initialized", shadowhook_get_version());
         } else {
-            const int error = shadowhook_get_init_errno();
-            SLOG_E("ShadowHook init failed: %d (%s)", error, shadowhook_to_errmsg(error));
+            // The packaged ShadowHook 2.0.0 library does not export
+            // shadowhook_get_init_errno on all supported ABIs.
+            SLOG_E("ShadowHook init failed with code %d", result);
         }
     });
     return ready;
