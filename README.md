@@ -30,7 +30,7 @@ Lokal: JDK 17 + Android SDK → `./gradlew assembleDebug`
 
 ## Batasan
 
-Tidak menyuntik native SO ke proses Minecraft. Native inject butuh preloader + offset per versi (skala Levi/Flarial penuh).
+Slime tidak menyuntik ke proses aplikasi Minecraft resmi. Native runtime sekarang dapat memetakan library Minecraft ke proses host milik Slime (`:game`), tetapi belum menjalankan game secara playable karena Java/GameActivity, assets, resource context, dan lifecycle Mojang belum tersedia.
 
 ## License
 
@@ -62,29 +62,13 @@ matching process ABI, validates each extracted ELF library, requires the core na
 `libfmod.so`, and `libMediaDecoders_Android.so`), and stores the package and SHA-256 manifest in
 app-private storage.
 
-The `MinecraftRuntimeActivity` currently provides import diagnostics. It is
-not yet a playable game Activity: the Mojang Java/GameActivity compatibility
-layer and game startup lifecycle are not included. Opening official Minecraft
-remains an external app launch in a separate process.
+The `MinecraftRuntimeActivity` runs in Slime's `:game` process and can map the imported core native dependency graph. It remains a diagnostic host, not a playable game Activity: Mojang Java/GameActivity compatibility, assets/resources, and game startup lifecycle are still missing. Opening official Minecraft remains an external app launch in a separate process.
 
 ## Minecraft Runtime Integration
 
-`MinecraftRuntimeBridge` is the in-process API for a custom runtime that
-owns the Minecraft game process. It initializes Slime's preloader after
-`libminecraftpe.so` is mapped, synchronizes live module settings, gates hook
-requests, and handles runtime shutdown.
+`MinecraftRuntimeActivity` now runs in the dedicated `:game` process. Its native loader validates the imported ABI, reads ELF `DT_NEEDED` dependencies, maps the core Minecraft libraries into that process, then initializes `libslime_preloader.so` through `MinecraftRuntimeBridge`.
 
-`MinecraftRuntimeConfigProvider` supplies the saved active version, module
-flags, numeric settings, signature overrides, and offsets to a same-package
-runtime without manually rebuilding the configuration maps. The obsolete
-separate `:runtime` service was removed because it could not see the game
-library mapped in another process.
-
-The normal launcher action still opens the installed official Minecraft app
-separately; it does not inject into it. This repository does not yet include
-the game APK import path or launcher-owned Minecraft Activity/runtime layer
-needed for end-to-end co-load. The native hook backend and per-version
-signatures also remain unfinished.
+This is process-local loading, not injection into the separately installed Minecraft app. The current `:game` Activity remains diagnostic: the Mojang Java/GameActivity compatibility layer, asset/resource context, and full game lifecycle are not yet implemented. Native hook backend and per-version signatures also remain unfinished.
 
 See [docs/RUNTIME_INTEGRATION.md](docs/RUNTIME_INTEGRATION.md) for the
 runtime callback sequence and remaining prerequisites.
@@ -92,9 +76,10 @@ runtime callback sequence and remaining prerequisites.
 ## Native Runtime Loader
 
 The launch pipeline detects the device ABI, inventories packaged native libraries,
-checks the preloader ELF ABI, and loads `libslime_preloader.so` from the installed APK.
-Android's linker resolves declared shared-library dependencies. A missing or
-incompatible library is reported as an explicit runtime error.
+parses imported ELF `DT_NEEDED` dependencies, and loads the core Minecraft library
+set in Slime's dedicated `:game` process. It then loads `libslime_preloader.so`
+from the installed APK and checks that `libminecraftpe.so` is mapped in the same
+process. A missing or incompatible library is reported as an explicit runtime error.
 
 ## Preloader NDK
 
