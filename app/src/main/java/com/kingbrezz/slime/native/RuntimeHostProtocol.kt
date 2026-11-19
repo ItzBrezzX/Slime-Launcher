@@ -3,6 +3,7 @@ package com.kingbrezz.slime.native
 internal object RuntimeHostProtocol {
     const val START = 1
     const val SHUTDOWN = 2
+    const val INSTALL_HOOKS = 3
     const val RESULT = 100
 
     const val VERSION = "version"
