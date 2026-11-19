@@ -169,7 +169,7 @@ object MinecraftInstalledSource {
             }
 
             val required = requiredLibraries(info.versionName)
-            val optional = listOf("libHttpClient.Android.so")
+            val optional = emptyList<String>()
             val manifest = buildManifest(info, required, optional)
             val marker = File(directory, ".slime-runtime-manifest")
             val cached = try { marker.isFile && marker.readText() == manifest } catch (_: Throwable) { false }
@@ -241,6 +241,7 @@ object MinecraftInstalledSource {
         add("libMediaDecoders_Android.so")
         if (versionAtLeast(versionName, "1.26.70.0")) add("libMallocRedirect.so")
         add("libminecraftpe.so")
+        if (versionAtLeast(versionName, "1.21.130")) add("libHttpClient.Android.so")
     }
 
     private fun versionAtLeast(raw: String, minimum: String): Boolean {
