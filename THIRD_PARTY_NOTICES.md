@@ -8,7 +8,7 @@ The LeviLauncher application itself is not built or bundled. Slime consumes only
 
 ## ShadowHook
 
-- [ShadowHook](https://github.com/bytedance/android-inline-hook), version `2.0.1`, is consumed from Maven Central as `com.bytedance.android:shadowhook:2.0.1`. License: MIT. Copyright (c) 2021-2026 ByteDance Inc. The upstream README includes notices for its BSD-licensed queue/tree headers, Linux syscall support, and MIT-licensed xDL component.
+- [ShadowHook](https://github.com/bytedance/android-inline-hook), version `2.0.0`, is consumed from Maven Central as `com.bytedance.android:shadowhook:2.0.1`. License: MIT. Copyright (c) 2021-2026 ByteDance Inc. The upstream README includes notices for its BSD-licensed queue/tree headers, Linux syscall support, and MIT-licensed xDL component.
 
 ## Preloader status
 
