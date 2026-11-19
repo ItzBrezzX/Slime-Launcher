@@ -118,6 +118,10 @@ class SlimeViewModel(private val repo: SlimeRepository) : ViewModel() {
         repo.importMinecraftApks(uris)
     }
 
+    fun importInstalledMinecraft() = work {
+        repo.importInstalledMinecraft()
+    }
+
     fun removeMinecraftRuntime() = work {
         repo.removeMinecraftRuntime()
     }
