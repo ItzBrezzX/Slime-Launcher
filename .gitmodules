@@ -1,0 +1,6 @@
+[submodule "third_party/LeviLauncher-Android"]
+	path = third_party/LeviLauncher-Android
+	url = https://github.com/LiteLDev/LeviLauncher-Android.git
+[submodule "third_party/preloader-android"]
+	path = third_party/preloader-android
+	url = https://github.com/LiteLDev/preloader-android.git

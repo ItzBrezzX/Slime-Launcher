@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.kingbrezz.slime"
-    compileSdk = 35
+    compileSdk = 36
     ndkVersion = "27.0.12077973"
 
     defaultConfig {
@@ -24,8 +24,16 @@ android {
             }
         }
 
+        // Levi's Android Preloader currently supports ARMv7 and ARM64 only.
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
+    }
+
+    sourceSets {
+        getByName("main") {
+            // Upstream bundled Android runtime bridge libraries (gxcore, PlayFab, MAE SDK).
+            jniLibs.srcDir(rootProject.file("third_party/LeviLauncher-Android/app/src/main/jniLibs"))
         }
     }
 
@@ -69,6 +77,8 @@ android {
 }
 
 dependencies {
+    implementation(project(":minecraft"))
+
     val composeBom = platform("androidx.compose:compose-bom:2024.10.01")
     implementation(composeBom)
     androidTestImplementation(composeBom)

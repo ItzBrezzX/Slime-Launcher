@@ -14,4 +14,5 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "Slime"
-include(":app")
+include(":app", ":minecraft")
+project(":minecraft").projectDir = file("third_party/LeviLauncher-Android/minecraft")
