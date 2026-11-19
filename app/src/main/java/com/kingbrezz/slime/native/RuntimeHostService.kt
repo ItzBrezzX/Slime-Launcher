@@ -56,41 +56,36 @@ class RuntimeHostService : Service() {
     }
 
     private fun startRuntime(input: Bundle): Bundle {
-        val runtime = NativeRuntimeLoader.load(this)
-        if (!runtime.preloaderLoaded) {
-            return resultBundle(runtime, false, PreloaderNative.emptyStatus(runtime.error ?: "native load failed"))
-        }
-
-        val version = input.getString(RuntimeHostProtocol.VERSION).orEmpty()
-        val initialized = PreloaderNative.init(version)
-
         val moduleIds = input.getStringArrayList(RuntimeHostProtocol.MODULE_IDS).orEmpty()
         val moduleFlags = input.getBooleanArray(RuntimeHostProtocol.MODULE_FLAGS) ?: booleanArrayOf()
-        moduleIds.forEachIndexed { index, id ->
-            PreloaderNative.setModule(id, moduleFlags.getOrElse(index) { false })
-        }
+        val modules = linkedMapOf<String, Boolean>()
+        moduleIds.forEachIndexed { index, id -> modules[id] = moduleFlags.getOrElse(index) { false } }
 
         val valueIds = input.getStringArrayList(RuntimeHostProtocol.VALUE_IDS).orEmpty()
         val valueNumbers = input.getDoubleArray(RuntimeHostProtocol.VALUE_NUMBERS) ?: doubleArrayOf()
-        valueIds.forEachIndexed { index, id ->
-            val split = id.indexOf('.')
-            if (split > 0) PreloaderNative.setModuleValue(id.substring(0, split), id.substring(split + 1), valueNumbers.getOrElse(index) { 0.0 })
-        }
+        val values = linkedMapOf<String, Double>()
+        valueIds.forEachIndexed { index, id -> values[id] = valueNumbers.getOrElse(index) { 0.0 } }
 
         val signatureNames = input.getStringArrayList(RuntimeHostProtocol.SIGNATURE_NAMES).orEmpty()
         val signaturePatterns = input.getStringArrayList(RuntimeHostProtocol.SIGNATURE_PATTERNS).orEmpty()
-        signatureNames.forEachIndexed { index, name ->
-            PreloaderNative.setSignature(name, signaturePatterns.getOrElse(index) { "" })
-        }
+        val signatures = linkedMapOf<String, String>()
+        signatureNames.forEachIndexed { index, name -> signatures[name] = signaturePatterns.getOrElse(index) { "" } }
 
         val offsetNames = input.getStringArrayList(RuntimeHostProtocol.OFFSET_NAMES).orEmpty()
         val offsetValues = input.getIntArray(RuntimeHostProtocol.OFFSET_VALUES) ?: intArrayOf()
-        offsetNames.forEachIndexed { index, name ->
-            offsetValues.getOrNull(index)?.let { PreloaderNative.setOffset(name, it) }
-        }
+        val offsets = linkedMapOf<String, Int>()
+        offsetNames.forEachIndexed { index, name -> offsetValues.getOrNull(index)?.let { offsets[name] = it } }
 
-        return resultBundle(runtime, initialized, PreloaderNative.status()).apply {
-            putString("libraryVersion", PreloaderNative.libraryVersion())
+        val entry = RuntimeCoLoadEntry.enter(
+            context = this,
+            versionId = input.getString(RuntimeHostProtocol.VERSION).orEmpty(),
+            moduleFlags = modules,
+            moduleValues = values,
+            signatureOverrides = signatures,
+            offsetOverrides = offsets,
+        )
+        return resultBundle(entry.runtime, entry.initialized, entry.status).apply {
+            putString("libraryVersion", if (entry.runtime.preloaderLoaded) PreloaderNative.libraryVersion() else "unavailable")
         }
     }
 
@@ -117,7 +112,7 @@ class RuntimeHostService : Service() {
     }
 
     private fun shutdownRuntime(): Bundle {
-        PreloaderNative.shutdown()
+        RuntimeCoLoadEntry.leave()
         val status = PreloaderNative.status()
         return Bundle().apply {
             putBoolean("libraryLoaded", PreloaderNative.libraryLoaded)
