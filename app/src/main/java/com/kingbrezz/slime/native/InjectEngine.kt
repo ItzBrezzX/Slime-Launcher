@@ -5,20 +5,14 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import com.kingbrezz.slime.data.Catalog
-import java.io.File
 
 /**
- * Live-inject pipeline for Slime.
+ * Launcher-side preparation and launch flow.
  *
- * Android reality (Levi-style co-load vs Windows MinHook):
- * - Stock Minecraft (com.mojang.minecraftpe) runs in its own process.
- * - Another app cannot System.load() a .so into that process without
- *   root/ptrace, a modified game APK, or a custom runtime the game loads.
- * - This engine runs the full pipeline, reports phase results, launches MC,
- *   and keeps native preloader + module flags ready for when signatures
- *   are filled and a co-load host is available.
- *
- * Status labels are explicit — no fake "injected OK" without resolved sigs.
+ * The official Minecraft package is an external Android application. This
+ * class never treats the Slime-owned :runtime service as the game process.
+ * A custom launcher runtime must call MinecraftRuntimeBridge from the same
+ * process that has loaded libminecraftpe.so.
  */
 class InjectEngine(private val context: Context) {
 
@@ -58,22 +52,23 @@ class InjectEngine(private val context: Context) {
         offsetOverrides: Map<String, Int> = emptyMap(),
     ): Result {
         val lines = mutableListOf<String>()
-        val log: (String) -> Unit = { s ->
-            lines.add(s)
-            android.util.Log.i(TAG, s)
+        val log: (String) -> Unit = { line ->
+            lines.add(line)
+            android.util.Log.i(TAG, line)
         }
 
-        // --- PrepareNative ---
         log("phase=PrepareNative")
         val runtime = NativeRuntimeLoader.load(context)
-        log("runtime ABI=${runtime.abi} supported=${runtime.supportedAbis.joinToString()}")
-        log("runtime dir=${runtime.libraryDirectory} libraries=${runtime.libraries.size}")
+        log("launcher ABI=" + runtime.abi + " supported=" + runtime.supportedAbis.joinToString())
+        log("launcher native dir=" + runtime.libraryDirectory + " libraries=" + runtime.libraries.size)
         runtime.libraries.forEach { lib ->
-            log("native ${lib.name} size=${lib.sizeBytes} ELF=${lib.elfClass ?: "?"}/${lib.machine ?: "?"} compatible=${lib.compatible}")
+            log("native " + lib.name + " size=" + lib.sizeBytes +
+                " ELF=" + (lib.elfClass ?: "?") + "/" + (lib.machine ?: "?") +
+                " compatible=" + lib.compatible)
         }
         if (!runtime.preloaderLoaded) {
             val err = runtime.error ?: PreloaderNative.loadError ?: "libslime_preloader.so missing"
-            log("FAIL native runtime: $err")
+            log("FAIL native runtime: " + err)
             return Result(
                 phase = Phase.Failed,
                 ok = false,
@@ -86,161 +81,122 @@ class InjectEngine(private val context: Context) {
                 hooksActive = 0,
                 hooksPending = 0,
                 lines = lines,
-                summary = "Native .so tidak termuat: $err",
+                summary = "Native .so tidak termuat: " + err,
             )
         }
-        log("native OK: ${PreloaderNative.libraryVersion()}")
+        log("native OK: " + PreloaderNative.libraryVersion())
 
-        // --- InitPreloader ---
-        log("phase=InitPreloader version=$versionId")
+        log("phase=InitPreloader version=" + versionId + " process=launcher")
         val initOk = PreloaderNative.init(versionId)
-        var st = PreloaderNative.status()
-        log("preloader phase=${st.phase} msg=${st.message}")
-        log("sig ${st.sigResolved}/${st.sigTotal} hooks active=${st.hooksActive} pending=${st.hooksPending}")
-
-        // --- SyncModules ---
-        log("phase=SyncModules count=${moduleFlags.size}")
-        moduleFlags.forEach { (id, on) -> PreloaderNative.setModule(id, on) }
-        log("modules enabled=${moduleFlags.count { it.value }} native=${PreloaderNative.moduleFlags().count { it.value }}")
-
-        // --- Dedicated runtime host process ---
-        log("phase=RuntimeHost process=:runtime")
-        val host = RuntimeHostClient.start(
-            context = context,
-            versionId = versionId,
-            moduleFlags = moduleFlags,
-            moduleValues = moduleValues,
-            signatureOverrides = signatureOverrides,
-            offsetOverrides = offsetOverrides,
-        )
-        log("host ABI=${host.abi} libraryLoaded=${host.libraryLoaded} version=${host.libraryVersion}")
-        log("host libraries=${host.libraries.size} dir=${host.libraryDirectory}")
-        host.libraries.forEach { log("host lib=$it") }
-        if (!host.libraryLoaded) {
-            val err = host.error ?: host.message.ifBlank { "runtime host could not load native library" }
-            log("FAIL runtime host: $err")
+        if (!initOk) {
+            val error = PreloaderNative.status().message
+            log("FAIL preloader init: " + error)
             return Result(
                 phase = Phase.Failed,
                 ok = false,
                 canInject = false,
                 minecraftInstalled = isMinecraftInstalled(),
                 minecraftLaunched = false,
-                libraryLoaded = false,
+                libraryLoaded = true,
                 sigResolved = 0,
                 sigTotal = 0,
                 hooksActive = 0,
                 hooksPending = 0,
                 lines = lines,
-                summary = "Runtime host gagal: $err",
+                summary = "Preloader gagal diinisialisasi: " + error,
             )
         }
-        st = PreloaderNative.Status(
-            phase = host.phase,
-            versionId = host.versionId,
-            message = host.message,
-            sigResolved = host.sigResolved,
-            sigTotal = host.sigTotal,
-            hooksActive = host.hooksActive,
-            hooksPending = host.hooksPending,
-            canInject = host.canInject,
-            targetFound = host.targetFound,
-            targetBase = host.targetBase,
-        )
-        log("host preloader phase=${st.phase} msg=${st.message}")
-        log("host sig ${st.sigResolved}/${st.sigTotal} hooks active=${st.hooksActive} pending=${st.hooksPending}")
 
-        // --- ProbeTarget ---
-        log("phase=ProbeTarget pkg=${Catalog.MC_PACKAGE}")
+        log("phase=SyncModules count=" + moduleFlags.size)
+        moduleFlags.forEach { (id, enabled) -> PreloaderNative.setModule(id, enabled) }
+        moduleValues.forEach { (compoundKey, value) ->
+            val split = compoundKey.indexOf('.')
+            if (split > 0) {
+                PreloaderNative.setModuleValue(
+                    compoundKey.substring(0, split),
+                    compoundKey.substring(split + 1),
+                    value,
+                )
+            }
+        }
+        signatureOverrides.forEach { (name, pattern) -> PreloaderNative.setSignature(name, pattern) }
+        offsetOverrides.forEach { (name, value) -> PreloaderNative.setOffset(name, value) }
+        log("modules enabled=" + moduleFlags.count { it.value } +
+            " native=" + PreloaderNative.moduleFlags().count { it.value })
+
+        var status = PreloaderNative.status()
+        log("launcher preloader phase=" + status.phase + " message=" + status.message)
+        log("launcher targetFound=" + status.targetFound +
+            " signatures=" + status.sigResolved + "/" + status.sigTotal)
+
+        log("phase=ProbeTarget package=" + Catalog.MC_PACKAGE)
         val installed = isMinecraftInstalled()
         log(if (installed) "Minecraft terpasang" else "Minecraft TIDAK terpasang")
 
-        // --- LaunchGame ---
         var launched = false
         if (autoLaunchGame && installed) {
             log("phase=LaunchGame")
             launched = launchMinecraft()
-            log(if (launched) "intent MAIN terkirim" else "intent gagal")
+            log(if (launched) "intent MAIN terkirim ke aplikasi Minecraft resmi" else "intent gagal")
         } else {
-            log("phase=LaunchGame skipped auto=$autoLaunchGame installed=$installed")
+            log("phase=LaunchGame skipped auto=" + autoLaunchGame + " installed=" + installed)
         }
 
-        // --- AttachAttempt ---
-        log("phase=AttachAttempt")
-        val attach = attemptAttach(st, installed, log)
-        log("attach=${attach.first} detail=${attach.second}")
-
-        // Hook calls are sent to the runtime host, never to a different process.
-        if (st.canInject && attach.first) {
-            val hookResult = RuntimeHostClient.installHooks(context)
-            log("runtime host hooks installed=${hookResult.installedHooks} error=${hookResult.error ?: "-"}")
-            st = PreloaderNative.Status(
-                phase = hookResult.phase,
-                versionId = host.versionId,
-                message = hookResult.message,
-                sigResolved = hookResult.sigResolved,
-                sigTotal = hookResult.sigTotal,
-                hooksActive = hookResult.hooksActive,
-                hooksPending = hookResult.hooksPending,
-                canInject = hookResult.canInject,
-                targetFound = hookResult.targetFound,
-                targetBase = hookResult.targetBase,
-            )
+        log("phase=AttachAttempt process=launcher")
+        if (status.targetFound) {
+            log("libminecraftpe.so terdeteksi pada proses Slime @ " + status.targetBase)
         } else {
-            log("hooks gated: target game module not mapped in runtime host process")
+            log("libminecraftpe.so tidak ada pada proses Slime")
+            log("Minecraft resmi tetap proses terpisah; bridge harus dipanggil dari runtime kustom")
         }
 
-        val can = st.canInject && attach.first
+        if (status.targetFound && status.canInject) {
+            val attempted = PreloaderNative.installAllHooks()
+            status = PreloaderNative.status()
+            log("same-process hook attempt=" + attempted +
+                " active=" + status.hooksActive + " pending=" + status.hooksPending)
+        } else {
+            log("hook install dilewati: game library belum co-load atau signature belum siap")
+        }
+
+        val hooksOperational = status.targetFound && status.hooksActive > 0
         val summary = when {
             !installed -> "Minecraft tidak ada — sesi demo saja"
-            !st.canInject -> "Runtime host Degraded (sig ${st.sigResolved}/${st.sigTotal}) — target game belum co-load"
-            !attach.first -> "Runtime host Slime aktif; Minecraft resmi tetap proses terpisah"
-            else -> "Pipeline Ready — hooks dapat diinstall"
+            !status.targetFound ->
+                if (launched) "Minecraft resmi dibuka; runtime co-load belum terhubung" else
+                    "Preloader Slime siap; runtime Minecraft belum terhubung"
+            !status.canInject ->
+                "Runtime game terdeteksi, tetapi signature belum siap (" +
+                    status.sigResolved + "/" + status.sigTotal + ")"
+            !hooksOperational ->
+                "Runtime game dan signature terdeteksi; backend hook belum mengaktifkan hook"
+            else -> "Runtime game satu proses; hook aktif " + status.hooksActive
         }
-        log("DONE summary=$summary")
+        log("DONE summary=" + summary)
 
         return Result(
             phase = Phase.Done,
-            ok = initOk && host.ok,
-            canInject = can,
+            ok = initOk,
+            canInject = hooksOperational,
             minecraftInstalled = installed,
             minecraftLaunched = launched,
             libraryLoaded = true,
-            sigResolved = st.sigResolved,
-            sigTotal = st.sigTotal,
-            hooksActive = st.hooksActive,
-            hooksPending = st.hooksPending,
+            sigResolved = status.sigResolved,
+            sigTotal = status.sigTotal,
+            hooksActive = status.hooksActive,
+            hooksPending = status.hooksPending,
             lines = lines,
             summary = summary,
         )
     }
 
-    private fun attemptAttach(
-        st: PreloaderNative.Status,
-        mcInstalled: Boolean,
-        log: (String) -> Unit,
-    ): Pair<Boolean, String> {
-        // Same-process load only. Cross-process inject into stock MC is not performed.
-        if (st.targetFound) {
-            log("libminecraftpe.so termuat di proses ini @ ${st.targetBase}")
-        }
-        if (!mcInstalled) {
-            return false to "no target package"
-        }
-        if (!st.canInject) {
-            return false to "preloader not Ready (need resolved signatures)"
-        }
-        if (st.targetFound) {
-            return true to "target in-process @ ${st.targetBase}"
-        }
-        // Stock package will not load our .so. Explicit refusal to claim success.
-        log("stock package ${Catalog.MC_PACKAGE} is separate process — no silent ptrace")
-        return false to "co-load host required (custom runtime / mod loader entry)"
-    }
-
     fun isMinecraftInstalled(): Boolean {
         return try {
             if (Build.VERSION.SDK_INT >= 33) {
-                context.packageManager.getPackageInfo(Catalog.MC_PACKAGE, PackageManager.PackageInfoFlags.of(0))
+                context.packageManager.getPackageInfo(
+                    Catalog.MC_PACKAGE,
+                    PackageManager.PackageInfoFlags.of(0),
+                )
             } else {
                 @Suppress("DEPRECATION")
                 context.packageManager.getPackageInfo(Catalog.MC_PACKAGE, 0)
