@@ -120,6 +120,9 @@ class MainActivity : ComponentActivity() {
                                         onImportMinecraft = {
                                             importMinecraftLauncher.launch(arrayOf("application/vnd.android.package-archive"))
                                         },
+                                        onImportInstalledMinecraft = {
+                                            vm.importInstalledMinecraft()
+                                        },
                                         onOpenRuntime = {
                                             startActivity(
                                                 Intent(this@MainActivity, MinecraftRuntimeActivity::class.java)
