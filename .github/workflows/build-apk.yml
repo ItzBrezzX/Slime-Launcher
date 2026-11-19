@@ -23,9 +23,7 @@ jobs:
         run: bash native-test/run.sh
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v4
-        with:
-          packages: platform-tools
+        uses: android-actions/setup-android@v3
 
       - name: Install NDK
         run: |
