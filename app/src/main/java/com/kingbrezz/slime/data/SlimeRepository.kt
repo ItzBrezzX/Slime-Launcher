@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import com.kingbrezz.slime.native.InjectEngine
+import com.kingbrezz.slime.native.RuntimeHostClient
 import com.kingbrezz.slime.native.PreloaderNative
 import kotlinx.coroutines.flow.update
 
@@ -260,17 +261,29 @@ class SlimeRepository(context: Context) {
     fun initPreloader(): String {
         syncNative()
         PreloaderNative.init(_activeVersionId.value)
-        val st = PreloaderNative.status()
-        val msg = "Preloader ${st.phase}: ${st.message} (sig ${st.sigResolved}/${st.sigTotal})"
+        val host = RuntimeHostClient.start(
+            context = app,
+            versionId = _activeVersionId.value,
+            moduleFlags = _modules.value.mapValues { it.value.enabled },
+            moduleValues = _moduleValues.value.mapValues { it.value.toDouble() },
+            signatureOverrides = _sigOverrides.value,
+            offsetOverrides = _offsetOverrides.value,
+        )
+        val msg = if (host.libraryLoaded) {
+            "Runtime host ${host.phase}: ${host.message} (ABI ${host.abi}, sig ${host.sigResolved}/${host.sigTotal})"
+        } else {
+            "Runtime host gagal: ${host.error ?: host.message}"
+        }
         log(msg)
         return msg
     }
 
     fun shutdownPreloader(): String {
+        val host = RuntimeHostClient.shutdown(app)
         PreloaderNative.shutdown()
-        syncNative() // shutdown clears the native bridge; keep UI state authoritative
-        log("Preloader shutdown")
-        return "Preloader dimatikan"
+        syncNative() // keep launcher-side UI state authoritative
+        log("Runtime host shutdown: ${host.message}")
+        return "Runtime host dimatikan"
     }
 
     /** Push flags, numeric values and signature/offset overrides to the native side. */
