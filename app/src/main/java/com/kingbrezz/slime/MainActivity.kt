@@ -97,9 +97,9 @@ class MainActivity : ComponentActivity() {
                                                 return@HomeScreen
                                             }
                                             vm.log("Mainkan ${v.version}")
-                                            val inject = vm.runInjectPipeline()
-                                            vm.log(inject.summary)
-                                            nav.navigate(Routes.SESSION)
+                                            vm.runInjectPipeline {
+                                                nav.navigate(Routes.SESSION)
+                                            }
                                         },
                                         onOpenVersions = { nav.navigate(Routes.VERSIONS) },
                                         onOpenConfigs = { nav.navigate(Routes.CONFIGS) },
