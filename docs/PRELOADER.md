@@ -126,3 +126,27 @@ or game-process co-load library is included.
 
 This loader only loads Slime's library into the launcher process. It does not load
 libraries into stock Minecraft's separate process or bypass Android process isolation.
+
+
+## Runtime / co-load host
+
+Slime now registers `RuntimeHostService` as a private Android service in the app-owned
+`:runtime` process. The launcher sends the selected game version, module flags,
+numeric settings, signature overrides, and offset overrides over a Messenger IPC
+channel. The service loads `libslime_preloader.so` in that process, initializes the
+native bridge, and returns ABI/library/preloader diagnostics. The host has explicit
+start, hook-install, and shutdown commands.
+
+`RuntimeCoLoadEntry.enter(context, ...)` is the reusable in-process bootstrap
+contract. A custom or otherwise authorized runtime that owns the game process can
+package `libslime_preloader.so` and invoke this entry point from that process. In that
+case the native module scanner runs against the libraries mapped in the calling
+process, including `libminecraftpe.so` only when that runtime has actually mapped it.
+
+**Current boundary:** Slime's `:runtime` service is a separate Slime-owned process.
+It is a runtime host and IPC integration point, not a process injector. It does not
+enter the official `com.mojang.minecraftpe` process, patch the official APK, use
+ptrace, or bypass Android application isolation. The official Minecraft app remains
+a separate process, so its game library is not visible to this service and live hooks
+remain unavailable until a custom/authorized runtime calls `RuntimeCoLoadEntry`
+inside the process that owns the game runtime.
