@@ -86,6 +86,11 @@ class InjectEngine(private val context: Context) {
         }
         log("native OK: " + PreloaderNative.libraryVersion())
 
+        // Overrides must be registered before init because native init
+        // rebuilds the selected version's signature/offset tables.
+        signatureOverrides.forEach { (name, pattern) -> PreloaderNative.setSignature(name, pattern) }
+        offsetOverrides.forEach { (name, value) -> PreloaderNative.setOffset(name, value) }
+
         log("phase=InitPreloader version=" + versionId + " process=launcher")
         val initOk = PreloaderNative.init(versionId)
         if (!initOk) {
@@ -119,8 +124,6 @@ class InjectEngine(private val context: Context) {
                 )
             }
         }
-        signatureOverrides.forEach { (name, pattern) -> PreloaderNative.setSignature(name, pattern) }
-        offsetOverrides.forEach { (name, value) -> PreloaderNative.setOffset(name, value) }
         log("modules enabled=" + moduleFlags.count { it.value } +
             " native=" + PreloaderNative.moduleFlags().count { it.value })
 
