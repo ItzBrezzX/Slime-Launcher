@@ -118,7 +118,7 @@ class MainActivity : ComponentActivity() {
                                     VersionsScreen(
                                         vm = vm,
                                         onImportMinecraft = {
-                                            importMinecraftLauncher.launch(arrayOf("*/*"))
+                                            importMinecraftLauncher.launch(arrayOf("application/vnd.android.package-archive"))
                                         },
                                         onOpenRuntime = {
                                             startActivity(
