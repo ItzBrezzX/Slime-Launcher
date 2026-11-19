@@ -18,9 +18,11 @@ Reference architecture:
 
 ## APK import and preparation
 
-The Versions screen accepts a user-selected set of APK files through Android's
-system document picker. Select exactly one Minecraft base APK and the
-corresponding split APKs for the same release. The importer:
+The Versions screen supports two import paths: copy the installed official
+Google Play Minecraft package (base plus split APKs) automatically, or select
+a user-provided set of APK files through Android's system document picker.
+For manual import, select exactly one Minecraft base APK and the corresponding
+split APKs for the same release. The importer:
 
 - checks that every archive reports package `com.mojang.minecraftpe`;
 - requires the installed Minecraft package to report Google Play
@@ -30,7 +32,8 @@ corresponding split APKs for the same release. The importer:
 - requires exactly one base APK and consistent version metadata;
 - selects the ABI matching the Slime process bitness;
 - extracts only native `.so` files from `lib/<abi>/`;
-- requires a non-empty `libminecraftpe.so`;
+- requires `libminecraftpe.so`, `libc++_shared.so`, `libfmod.so`, and
+  `libMediaDecoders_Android.so`;
 - validates ELF magic, bitness, and machine type for every extracted library;
 - stops copying/extracting if app-private storage falls below the free-space guard;
 - stores the APKs, native libraries, and SHA-256 checksums in Slime's private
