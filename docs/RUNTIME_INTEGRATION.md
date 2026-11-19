@@ -16,6 +16,31 @@ Reference architecture:
 - [LeviLauncher Android source](https://github.com/LiteLDev/LeviLauncher-Android)
 - [LeviLauncher Android native-mod guide](https://docs.levimc.org/LeviLauncher/android/guide/developer)
 
+## APK import and preparation
+
+The Versions screen accepts a user-selected set of APK files through Android's
+system document picker. Select exactly one Minecraft base APK and the
+corresponding split APKs for the same release. The importer:
+
+- checks that every archive reports package `com.mojang.minecraftpe`;
+- requires exactly one base APK and consistent version metadata;
+- selects the ABI matching the Slime process bitness;
+- extracts only native `.so` files from `lib/<abi>/`;
+- requires a non-empty `libminecraftpe.so`;
+- stores the APKs, native libraries, and SHA-256 checksums in Slime's private
+  `files/minecraft-runtime/active` directory;
+- stages a new import before replacing the previous active import, so a failed
+  import does not delete the previously prepared copy.
+
+The importer does not install the APK, modify its signature, patch it, or
+bypass purchase/licensing checks. It only prepares files supplied by the user.
+
+`MinecraftRuntimeActivity` displays the imported package/version/ABI and
+native-library inventory. It is currently a preparation/diagnostic screen,
+not a playable Mojang game Activity. The optional "open official Minecraft"
+button launches the separately installed app and does not co-load the Slime
+preloader into it.
+
 ## Bridge API
 
 `MinecraftRuntimeBridge` must be called by the Activity/Application that owns
