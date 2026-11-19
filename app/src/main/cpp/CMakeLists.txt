@@ -25,7 +25,9 @@ target_include_directories(slime_preloader PRIVATE include)
 find_library(log-lib log)
 find_library(android-lib android)
 
-target_link_libraries(slime_preloader ${log-lib} ${android-lib})
+find_package(shadowhook REQUIRED CONFIG)
+
+target_link_libraries(slime_preloader ${log-lib} ${android-lib} shadowhook::shadowhook)
 
 target_compile_options(slime_preloader PRIVATE
     -fvisibility=hidden
