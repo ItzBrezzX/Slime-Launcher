@@ -2,6 +2,7 @@ package com.kingbrezz.slime.native
 
 import android.content.Context
 import android.os.Build
+import android.os.Process
 import java.io.File
 import java.io.RandomAccessFile
 
@@ -15,8 +16,13 @@ object NativeRuntimeLoader {
 
     fun inspect(context: Context): Result {
         val supported = Build.SUPPORTED_ABIS.toList()
-        val abi = supported.firstOrNull { it in setOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86") }
-            ?: Build.CPU_ABI.orEmpty()
+        val process64Bit = Process.is64Bit()
+        val allowedAbis = if (process64Bit) {
+            setOf("arm64-v8a", "x86_64")
+        } else {
+            setOf("armeabi-v7a", "armeabi", "x86")
+        }
+        val abi = supported.firstOrNull { it in allowedAbis } ?: Build.CPU_ABI.orEmpty()
         val dir = context.applicationInfo.nativeLibraryDir?.let(::File) ?: File(context.applicationInfo.dataDir, "lib")
         val libraries = dir.listFiles().orEmpty().filter { it.isFile && it.extension == "so" }.sortedBy { it.name }.map { file ->
             val header = readElfHeader(file)
