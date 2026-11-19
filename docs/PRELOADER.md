@@ -100,3 +100,29 @@ bash native-test/run.sh   # host build with -Werror, JNI via fake JNIEnv, fake l
 ```
 
 CI runs it before `assembleDebug`. The Kotlin/Compose side is compiled only by Gradle (CI).
+
+
+## Native Runtime Loader
+
+```text
+InjectEngine
+  -> NativeRuntimeLoader.inspect(applicationInfo.nativeLibraryDir)
+  -> Detect device ABI + enumerate packaged .so files
+  -> Validate ELF magic, ELF class, and e_machine
+  -> System.load(absolute path to libslime_preloader.so)
+  -> PreloaderNative JNI calls
+```
+
+The loader reports the selected ABI, supported device ABIs, native library directory,
+each packaged library's size and ELF compatibility, and any load error. A missing or
+incompatible preloader fails the pipeline with an explicit diagnostic rather than
+claiming native readiness.
+
+Android's dynamic linker resolves each shared object's declared DT_NEEDED dependencies
+when the library is loaded. Slime therefore does not manually load platform libraries
+such as libc, liblog, or libandroid, and does not guess a dependency order. The current
+APK packages the preloader as the native entry point; no separate Minecraft runtime
+or game-process co-load library is included.
+
+This loader only loads Slime's library into the launcher process. It does not load
+libraries into stock Minecraft's separate process or bypass Android process isolation.
