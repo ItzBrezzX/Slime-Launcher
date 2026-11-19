@@ -4,8 +4,12 @@ import android.content.Context
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Process
 import com.kingbrezz.slime.data.Catalog
 import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.io.IOException
 import java.util.zip.ZipFile
 
 /**
@@ -21,9 +25,11 @@ object MinecraftInstalledSource {
         val packageName: String,
         val versionName: String,
         val versionCode: Long,
+        val lastUpdateTime: Long,
         val installerPackageName: String?,
         val baseApkPath: String,
         val splitApkPaths: List<String>,
+        val nativeLibraryDir: String,
         val deviceAbi: String,
         val libraryLocation: String,
     ) {
@@ -45,6 +51,16 @@ object MinecraftInstalledSource {
         data class Ready(val info: Info) : Inspection
         data class Unavailable(val reason: String) : Inspection
     }
+
+    data class RuntimeStatus(
+        val ready: Boolean,
+        val message: String,
+        val versionName: String = "",
+        val abi: String = "",
+        val directory: String = "",
+        val libraries: List<String> = emptyList(),
+        val reusedCache: Boolean = false,
+    )
 
     fun inspect(context: Context): Inspection {
         val appContext = context.applicationContext
@@ -85,7 +101,7 @@ object MinecraftInstalledSource {
                 "Base APK Minecraft tidak dapat dibaca dari lokasi PackageManager"
             )
 
-        val supportedAbis = Build.SUPPORTED_ABIS.orEmpty().toList()
+        val supportedAbis = (if (Process.is64Bit()) Build.SUPPORTED_64_BIT_ABIS else Build.SUPPORTED_32_BIT_ABIS).orEmpty().toList()
         if (supportedAbis.isEmpty()) {
             return Inspection.Unavailable("Android tidak melaporkan ABI perangkat")
         }
@@ -121,11 +137,13 @@ object MinecraftInstalledSource {
                 packageName = packageInfo.packageName ?: Catalog.MC_PACKAGE,
                 versionName = packageInfo.versionName.orEmpty(),
                 versionCode = packageInfoVersionCode(packageInfo),
+                lastUpdateTime = packageInfo.lastUpdateTime,
                 installerPackageName = installerPackageName(packageManager),
                 baseApkPath = baseApk.absolutePath,
                 splitApkPaths = apkFiles
                     .filterNot { it.absolutePath == baseApk.absolutePath }
                     .map { it.absolutePath },
+                nativeLibraryDir = appInfo.nativeLibraryDir.orEmpty(),
                 deviceAbi = selectedAbi,
                 libraryLocation = libraryLocation,
             )
