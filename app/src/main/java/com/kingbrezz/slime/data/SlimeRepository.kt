@@ -275,6 +275,7 @@ class SlimeRepository(context: Context) {
 
     /** Push flags, numeric values and signature/offset overrides to the native side. */
     fun syncNative() {
+        if (!PreloaderNative.libraryLoaded) PreloaderNative.ensureLoaded()
         if (!PreloaderNative.libraryLoaded) return
         _modules.value.forEach { (id, st) -> PreloaderNative.setModule(id, st.enabled) }
         Catalog.modules.forEach { def ->
