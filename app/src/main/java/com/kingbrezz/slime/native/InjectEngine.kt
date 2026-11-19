@@ -100,6 +100,18 @@ class InjectEngine(private val context: Context) {
         val installed = isMinecraftInstalled()
         log(if (installed) "Minecraft terpasang" else "Minecraft TIDAK terpasang")
 
+        // Inspect the installed package locally; no APK upload or file-picker export is needed.
+        if (installed) {
+            when (val source = MinecraftInstalledSource.inspect(context)) {
+                is MinecraftInstalledSource.Inspection.Ready -> {
+                    log(source.info.logSummary())
+                }
+                is MinecraftInstalledSource.Inspection.Unavailable -> {
+                    log("Minecraft source unavailable: ${source.reason}")
+                }
+            }
+        }
+
         // --- LaunchGame ---
         var launched = false
         if (autoLaunchGame && installed) {
