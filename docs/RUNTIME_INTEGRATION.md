@@ -23,10 +23,16 @@ system document picker. Select exactly one Minecraft base APK and the
 corresponding split APKs for the same release. The importer:
 
 - checks that every archive reports package `com.mojang.minecraftpe`;
+- requires the installed Minecraft package to report Google Play
+  (`com.android.vending`) as its installer;
+- compares the imported base APK signing certificate with the installed
+  official app's current/history certificates;
 - requires exactly one base APK and consistent version metadata;
 - selects the ABI matching the Slime process bitness;
 - extracts only native `.so` files from `lib/<abi>/`;
 - requires a non-empty `libminecraftpe.so`;
+- validates ELF magic, bitness, and machine type for every extracted library;
+- stops copying/extracting if app-private storage falls below the free-space guard;
 - stores the APKs, native libraries, and SHA-256 checksums in Slime's private
   `files/minecraft-runtime/active` directory;
 - stages a new import before replacing the previous active import, so a failed
