@@ -1,6 +1,8 @@
 #include "hook_registry.hpp"
 #include "signature_manager.hpp"
 #include "slime_log.hpp"
+#include <shadowhook.h>
+#include <mutex>
 
 namespace slime {
 
@@ -25,8 +27,45 @@ void HookRegistry::registerHook(const std::string& name, const std::string& sigN
     d.sigName = sigName;
     d.status = HookStatus::Pending;
     d.target = 0;
+    d.replacement = nullptr;
+    d.original = nullptr;
+    d.stub = nullptr;
     d.reason = "signature belum di-resolve";
     hooks_.push_back(d);
+}
+
+
+void HookRegistry::registerDetour(const std::string& name, void* replacement) {
+    for (auto& h : hooks_) {
+        if (h.name != name) continue;
+        h.replacement = replacement;
+        h.reason = replacement ? "detour terdaftar" : "detour belum terdaftar";
+        if (h.target == 0) h.status = HookStatus::Pending;
+        else if (h.status != HookStatus::Active) h.status = HookStatus::Idle;
+        return;
+    }
+    SLOG_W("detour %s ignored: hook not registered", name.c_str());
+}
+
+void* HookRegistry::originalFor(const std::string& name) const {
+    for (const auto& h : hooks_) if (h.name == name) return h.original;
+    return nullptr;
+}
+
+bool HookRegistry::initializeBackend() {
+    static std::once_flag once;
+    static bool ready = false;
+    std::call_once(once, [] {
+        const int result = shadowhook_init(SHADOWHOOK_MODE_UNIQUE, false);
+        ready = result == 0;
+        if (ready) {
+            SLOG_I("ShadowHook %s initialized", shadowhook_get_version());
+        } else {
+            const int error = shadowhook_get_init_errno();
+            SLOG_E("ShadowHook init failed: %d (%s)", error, shadowhook_to_errmsg(error));
+        }
+    });
+    return ready;
 }
 
 void HookRegistry::resolveFromSignatures() {
@@ -68,19 +107,46 @@ std::vector<HookDesc> HookRegistry::all() const {
 bool HookRegistry::tryInstall(const std::string& name) {
     for (auto& h : hooks_) {
         if (h.name != name) continue;
-        if (h.status == HookStatus::Active) return true;
+        if (h.status == HookStatus::Active && h.stub != nullptr) return true;
         if (h.target == 0) {
             h.status = HookStatus::Pending;
-            h.reason = "tidak ada alamat target (signature belum ter-resolve)";
+            h.reason = "target signature belum ter-resolve";
             SLOG_W("hook %s: no target address", name.c_str());
             return false;
         }
-        // No trampoline backend is linked and stock MC is a separate process.
-        // Never claim Active without a real patched function.
-        h.status = HookStatus::Failed;
-        h.reason = "backend inline-hook belum tersedia; butuh trampoline + co-load in-process";
-        SLOG_W("hook %s: install gated (%s)", name.c_str(), h.reason.c_str());
-        return false;
+        if (h.replacement == nullptr) {
+            h.status = HookStatus::Failed;
+            h.reason = "detour function belum didaftarkan";
+            SLOG_W("hook %s: detour function missing", name.c_str());
+            return false;
+        }
+        if (!initializeBackend()) {
+            h.status = HookStatus::Failed;
+            h.reason = "ShadowHook backend belum siap";
+            return false;
+        }
+        h.original = nullptr;
+        h.stub = shadowhook_hook_func_addr(
+            reinterpret_cast<void*>(h.target),
+            h.replacement,
+            &h.original
+        );
+        if (h.stub == nullptr || h.original == nullptr) {
+            const int error = shadowhook_get_errno();
+            h.status = HookStatus::Failed;
+            h.reason = std::string("ShadowHook gagal: ") + shadowhook_to_errmsg(error);
+            SLOG_W("hook %s install failed: %s", name.c_str(), h.reason.c_str());
+            if (h.stub != nullptr) {
+                shadowhook_unhook(h.stub);
+                h.stub = nullptr;
+            }
+            h.original = nullptr;
+            return false;
+        }
+        h.status = HookStatus::Active;
+        h.reason = "ShadowHook inline hook active";
+        SLOG_I("hook %s installed at %p", name.c_str(), reinterpret_cast<void*>(h.target));
+        return true;
     }
     return false;
 }
@@ -95,6 +161,17 @@ int HookRegistry::installAll() {
 }
 
 void HookRegistry::reset() {
+    for (auto& h : hooks_) {
+        if (h.stub != nullptr) {
+            const int result = shadowhook_unhook(h.stub);
+            if (result != 0) {
+                const int error = shadowhook_get_errno();
+                SLOG_W("hook %s unhook failed: %s", h.name.c_str(), shadowhook_to_errmsg(error));
+            }
+            h.stub = nullptr;
+            h.original = nullptr;
+        }
+    }
     hooks_.clear();
 }
 
