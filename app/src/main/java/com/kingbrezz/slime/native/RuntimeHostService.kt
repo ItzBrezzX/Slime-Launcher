@@ -41,6 +41,7 @@ class RuntimeHostService : Service() {
             when (message.what) {
                 RuntimeHostProtocol.START -> startRuntime(message.data ?: Bundle())
                 RuntimeHostProtocol.SHUTDOWN -> shutdownRuntime()
+                RuntimeHostProtocol.INSTALL_HOOKS -> installHooks()
                 else -> Bundle().apply { putString("error", "Unknown runtime command: ${message.what}") }
             }
         } catch (t: Throwable) {
@@ -90,6 +91,28 @@ class RuntimeHostService : Service() {
 
         return resultBundle(runtime, initialized, PreloaderNative.status()).apply {
             putString("libraryVersion", PreloaderNative.libraryVersion())
+        }
+    }
+
+    private fun installHooks(): Bundle {
+        if (!PreloaderNative.libraryLoaded) {
+            return Bundle().apply { putBoolean("ok", false); putString("error", "native library not loaded") }
+        }
+        val count = PreloaderNative.installAllHooks()
+        val status = PreloaderNative.status()
+        return Bundle().apply {
+            putBoolean("ok", count > 0)
+            putBoolean("libraryLoaded", true)
+            putInt("installedHooks", count)
+            putString("phase", status.phase)
+            putString("message", status.message)
+            putInt("sigResolved", status.sigResolved)
+            putInt("sigTotal", status.sigTotal)
+            putInt("hooksActive", status.hooksActive)
+            putInt("hooksPending", status.hooksPending)
+            putBoolean("canInject", status.canInject)
+            putBoolean("targetFound", status.targetFound)
+            putString("targetBase", status.targetBase)
         }
     }
 
