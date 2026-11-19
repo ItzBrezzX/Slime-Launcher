@@ -19,6 +19,7 @@
         android:theme="@style/Theme.Slime">
         <activity
             android:name=".runtime.MinecraftRuntimeActivity"
+            android:process=":game"
             android:exported="false"
             android:screenOrientation="unspecified"
             android:theme="@style/Theme.Slime" />
