@@ -3,9 +3,8 @@ package com.kingbrezz.slime.native
 import android.content.Context
 
 /**
- * In-process bootstrap API for a runtime that owns the game process.
- * A custom/authorized game runtime calls enter() from its own process after
- * packaging libslime_preloader.so in that runtime APK.
+ * Reusable in-process bootstrap for a custom runtime that owns the game.
+ * This must be called by the process that has mapped libminecraftpe.so.
  */
 object RuntimeCoLoadEntry {
     data class StartResult(
@@ -25,19 +24,38 @@ object RuntimeCoLoadEntry {
     ): StartResult {
         val runtime = NativeRuntimeLoader.load(context)
         if (!runtime.preloaderLoaded) {
-            return StartResult(runtime, false, PreloaderNative.emptyStatus(runtime.error ?: "native library unavailable"))
+            return StartResult(
+                runtime,
+                false,
+                PreloaderNative.emptyStatus(runtime.error ?: "native library unavailable"),
+            )
+        }
+
+        // Store overrides before init: native initialization rebuilds the
+        // per-version tables and applies the stored signature/offset overrides.
+        signatureOverrides.forEach { (name, pattern) ->
+            PreloaderNative.setSignature(name, pattern)
+        }
+        offsetOverrides.forEach { (name, value) ->
+            PreloaderNative.setOffset(name, value)
         }
 
         val initialized = PreloaderNative.init(versionId)
-        moduleFlags.forEach { (id, enabled) -> PreloaderNative.setModule(id, enabled) }
-        moduleValues.forEach { (compoundKey, value) ->
-            val split = compoundKey.indexOf('.')
-            if (split > 0) {
-                PreloaderNative.setModuleValue(compoundKey.substring(0, split), compoundKey.substring(split + 1), value)
+        if (initialized) {
+            moduleFlags.forEach { (id, enabled) ->
+                PreloaderNative.setModule(id, enabled)
+            }
+            moduleValues.forEach { (compoundKey, value) ->
+                val split = compoundKey.indexOf('.')
+                if (split > 0) {
+                    PreloaderNative.setModuleValue(
+                        compoundKey.substring(0, split),
+                        compoundKey.substring(split + 1),
+                        value,
+                    )
+                }
             }
         }
-        signatureOverrides.forEach { (name, pattern) -> PreloaderNative.setSignature(name, pattern) }
-        offsetOverrides.forEach { (name, value) -> PreloaderNative.setOffset(name, value) }
 
         return StartResult(runtime, initialized, PreloaderNative.status())
     }
