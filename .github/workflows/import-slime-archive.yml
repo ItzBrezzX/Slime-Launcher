@@ -1,0 +1,99 @@
+name: Import Slime Launcher archive
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - slime-launcher.zip
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Safely extract project archive
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ ! -f slime-launcher.zip ]]; then
+            echo "Archive is absent; nothing to import."
+            exit 0
+          fi
+
+          python3 - <<'PY'
+          import pathlib
+          import shutil
+          import stat
+          import zipfile
+          from pathlib import PurePosixPath
+
+          archive = pathlib.Path("slime-launcher.zip")
+          staging = pathlib.Path(".slime-import")
+
+          if staging.exists():
+              shutil.rmtree(staging)
+          staging.mkdir()
+
+          with zipfile.ZipFile(archive) as zf:
+              entries = zf.infolist()
+              if not entries:
+                  raise RuntimeError("The ZIP archive is empty.")
+
+              extracted_files = 0
+              for entry in entries:
+                  name = entry.filename.replace("\\", "/")
+                  member = PurePosixPath(name)
+
+                  if member.is_absolute() or ".." in member.parts:
+                      raise RuntimeError(f"Unsafe archive path: {entry.filename}")
+                  if not member.parts or member.parts[0] != "slime-launcher":
+                      raise RuntimeError(f"Unexpected archive root: {entry.filename}")
+
+                  relative = member.parts[1:]
+                  if not relative:
+                      continue
+
+                  target = staging.joinpath(*relative)
+                  file_type = (entry.external_attr >> 16) & 0o170000
+                  if file_type == stat.S_IFLNK:
+                      raise RuntimeError(f"Symlinks are not allowed: {entry.filename}")
+
+                  if entry.is_dir():
+                      target.mkdir(parents=True, exist_ok=True)
+                  else:
+                      target.parent.mkdir(parents=True, exist_ok=True)
+                      with zf.open(entry) as source, target.open("wb") as destination:
+                          shutil.copyfileobj(source, destination)
+                      extracted_files += 1
+
+          if not (staging / "README.md").is_file():
+              raise RuntimeError("README.md is missing from the expected project root.")
+          if not (staging / "app" / "build.gradle.kts").is_file():
+              raise RuntimeError("app/build.gradle.kts is missing; archive layout is unexpected.")
+
+          shutil.copytree(staging, pathlib.Path("."), dirs_exist_ok=True)
+          shutil.rmtree(staging)
+          archive.unlink()
+          print(f"Imported {extracted_files} project files.")
+          PY
+
+      - name: Commit imported project
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No project changes to commit."
+            exit 0
+          fi
+          git commit -m "Import Slime Launcher source"
+          git push
