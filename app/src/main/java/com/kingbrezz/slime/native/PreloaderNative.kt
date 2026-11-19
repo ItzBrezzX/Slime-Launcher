@@ -56,14 +56,19 @@ object PreloaderNative {
     var loadError: String? = null
         private set
 
-    init {
-        try {
-            System.loadLibrary("slime_preloader")
+    @Synchronized
+    fun ensureLoaded(absolutePath: String? = null): Boolean {
+        if (libraryLoaded) return true
+        return try {
+            if (absolutePath.isNullOrBlank()) System.loadLibrary("slime_preloader")
+            else System.load(absolutePath)
             libraryLoaded = true
             loadError = null
+            true
         } catch (t: Throwable) {
             libraryLoaded = false
             loadError = t.message ?: t.javaClass.simpleName
+            false
         }
     }
 
