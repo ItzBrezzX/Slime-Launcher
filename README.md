@@ -52,18 +52,21 @@ Isinya, semua terhubung ke native lewat JNI:
 | Alat | Uji pattern pada modul in-process, self-test native, daftar modul proses |
 | Log | Log launcher + salin |
 
-## Native Runtime / Co-load Host
+## Minecraft Runtime Integration
 
-A private `:runtime` service runs Slime's native preloader in a dedicated
-app-owned process and communicates with the launcher over Messenger IPC.
-`RuntimeCoLoadEntry` is the reusable in-process bootstrap API for a custom or
-authorized runtime that packages the native library and invokes it from the
-process that owns the game runtime.
+`MinecraftRuntimeBridge` is the in-process API for a custom runtime that
+actually owns the Minecraft process. It initializes Slime's preloader after
+`libminecraftpe.so` is mapped, syncs module settings, gates hook requests,
+and handles runtime shutdown.
 
-This does **not** inject into the official Minecraft app. The current service
-runs in Slime's own process; stock Minecraft remains isolated in its own process.
-True in-process scanning requires an authorized custom runtime to call the entry
-point from the process where `libminecraftpe.so` is already mapped.
+The manifest's private `:runtime` service is a Slime-owned diagnostic/IPC
+process, not the Minecraft process. The normal launcher action still opens
+the installed official Minecraft app separately; it does not inject into it.
+This repository does not yet include the APK import path or launcher-owned
+Minecraft Activity/runtime layer needed for end-to-end co-load.
+
+See [docs/RUNTIME_INTEGRATION.md](docs/RUNTIME_INTEGRATION.md) for the exact
+runtime callback sequence and remaining prerequisites.
 
 ## Native Runtime Loader
 
