@@ -40,7 +40,7 @@ object MinecraftRuntimeConfigProvider {
     fun read(context: Context): Snapshot {
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-        val states = parse(prefs.getString(KEY_MODULES, null), moduleType)
+        val states = parse<Map<String, ModuleState>>(prefs.getString(KEY_MODULES, null), moduleType)
             ?: Catalog.defaultModuleStates()
         val mergedStates = Catalog.defaultModuleStates().apply {
             states.forEach { (id, state) -> put(id, state) }
