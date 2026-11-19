@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="slime">#C6F25A</color>
+    <color name="bg">#0B100E</color>
+    <color name="surface">#17211C</color>
+    <color name="ink">#12180D</color>
+    <color name="ic_launcher_background">#0B100E</color>
+</resources>

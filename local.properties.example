@@ -1,0 +1,3 @@
+## Salin ke local.properties dan isi path SDK (hanya lokal, jangan commit)
+# sdk.dir=/Users/YOU/Library/Android/sdk
+# sdk.dir=C\:\\Users\\YOU\\AppData\\Local\\Android\\Sdk
