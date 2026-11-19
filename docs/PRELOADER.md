@@ -128,25 +128,28 @@ This loader only loads Slime's library into the launcher process. It does not lo
 libraries into stock Minecraft's separate process or bypass Android process isolation.
 
 
-## Runtime / co-load host
+## Runtime integration bridge
 
-Slime now registers `RuntimeHostService` as a private Android service in the app-owned
-`:runtime` process. The launcher sends the selected game version, module flags,
-numeric settings, signature overrides, and offset overrides over a Messenger IPC
-channel. The service loads `libslime_preloader.so` in that process, initializes the
-native bridge, and returns ABI/library/preloader diagnostics. The host has explicit
-start, hook-install, and shutdown commands.
+`MinecraftRuntimeBridge` is the entry point for a custom runtime that owns
+the Minecraft process. Call `onRuntimeReady` only after that runtime has
+mapped `libminecraftpe.so`; the call loads Slime's preloader in the current
+process, initializes the selected build, and syncs module/signature/offset
+configuration. Use `syncModules` for live settings changes and
+`onRuntimeStopping` during normal game shutdown.
 
-`RuntimeCoLoadEntry.enter(context, ...)` is the reusable in-process bootstrap
-contract. A custom or otherwise authorized runtime that owns the game process can
-package `libslime_preloader.so` and invoke this entry point from that process. In that
-case the native module scanner runs against the libraries mapped in the calling
-process, including `libminecraftpe.so` only when that runtime has actually mapped it.
+`installHooks` checks that the target game library is mapped in the calling
+process and that signatures are resolved. It still cannot create an active
+hook until the ARM64 trampoline backend is implemented.
 
-**Current boundary:** Slime's `:runtime` service is a separate Slime-owned process.
-It is a runtime host and IPC integration point, not a process injector. It does not
-enter the official `com.mojang.minecraftpe` process, patch the official APK, use
-ptrace, or bypass Android application isolation. The official Minecraft app remains
-a separate process, so its game library is not visible to this service and live hooks
-remain unavailable until a custom/authorized runtime calls `RuntimeCoLoadEntry`
-inside the process that owns the game runtime.
+The Android manifest's private `:runtime` service is a Slime-owned diagnostic
+process. It is not the Minecraft process and must not be used as an attach
+target. The launcher pipeline now checks the native state in its own process
+and reports the official Minecraft app as separate.
+
+The current repository does not yet include a Minecraft APK import flow, a
+launcher-owned Minecraft Activity/runtime compatibility layer, or the full
+game runtime package manager. The bridge API is the in-process seam for that
+next integration; it does not by itself launch or co-load the stock game.
+
+See [RUNTIME_INTEGRATION.md](RUNTIME_INTEGRATION.md) for call order and the
+remaining prerequisites.
