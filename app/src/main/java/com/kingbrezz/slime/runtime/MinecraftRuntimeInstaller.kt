@@ -116,7 +116,7 @@ class MinecraftRuntimeInstaller(context: Context) {
             }
 
             val baseIndexes = packageInfos.indices.filter { index ->
-                packageInfos[index].applicationInfo?.splitName.isNullOrBlank()
+                packageInfos[index].splitNames.isNullOrEmpty()
             }
             if (baseIndexes.size != 1) {
                 throw IOException("Pilih tepat satu base APK Minecraft dan seluruh split APK yang diperlukan")
