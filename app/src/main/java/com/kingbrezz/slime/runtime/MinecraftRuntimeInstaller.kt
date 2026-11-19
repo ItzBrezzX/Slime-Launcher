@@ -455,9 +455,10 @@ class MinecraftRuntimeInstaller(context: Context) {
             header[3] == 'F'.code.toByte()
         val expectedClass = if (abi == "arm64-v8a" || abi == "x86_64") 2 else 1
         val elfClass = header[4].toInt() and 0xff
+        val elfData = header[5].toInt() and 0xff
         val machine = (header[18].toInt() and 0xff) or
             ((header[19].toInt() and 0xff) shl 8)
-        if (!validMagic || elfClass != expectedClass || machine != expected) {
+        if (!validMagic || elfClass != expectedClass || elfData != 1 || machine != expected) {
             throw IOException("ELF ABI tidak cocok pada ${file.name} (expected $abi)")
         }
     }
