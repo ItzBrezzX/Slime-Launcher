@@ -130,26 +130,33 @@ libraries into stock Minecraft's separate process or bypass Android process isol
 
 ## Runtime integration bridge
 
-`MinecraftRuntimeBridge` is the entry point for a custom runtime that owns
-the Minecraft process. Call `onRuntimeReady` only after that runtime has
-mapped `libminecraftpe.so`; the call loads Slime's preloader in the current
-process, initializes the selected build, and syncs module/signature/offset
-configuration. Use `syncModules` for live settings changes and
-`onRuntimeStopping` during normal game shutdown.
+`MinecraftRuntimeBridge` is the in-process entry point for a custom runtime
+that owns the game process. Call `onRuntimeReady` only after that runtime has
+mapped `libminecraftpe.so`; this loads Slime's preloader in the calling
+process, initializes the selected build, and syncs configuration.
 
-`installHooks` checks that the target game library is mapped in the calling
-process and that signatures are resolved. It still cannot create an active
-hook until the ARM64 trampoline backend is implemented.
+For a same-package runtime, `MinecraftRuntimeConfigProvider` reads the active
+version, module toggles, numeric values, signature overrides, and offsets from
+the launcher's private preferences. The runtime can call
+`MinecraftRuntimeBridge.onRuntimeReady(applicationContext)` and later
+`syncFromLauncher(applicationContext)`. An independently packaged runtime
+must pass the configuration maps explicitly.
 
-The Android manifest's private `:runtime` service is a Slime-owned diagnostic
-process. It is not the Minecraft process and must not be used as an attach
-target. The launcher pipeline now checks the native state in its own process
-and reports the official Minecraft app as separate.
+`installHooks` checks same-process mapping and resolved signatures. It still
+cannot create active hooks until the ARM64 trampoline backend is implemented.
+Signature patterns and offsets remain placeholders until they are verified
+against the exact Android game build.
 
-The current repository does not yet include a Minecraft APK import flow, a
-launcher-owned Minecraft Activity/runtime compatibility layer, or the full
-game runtime package manager. The bridge API is the in-process seam for that
-next integration; it does not by itself launch or co-load the stock game.
+The old separate `:runtime` diagnostic service was removed: a service in a
+different process cannot see the Minecraft library mapping. The launcher
+pipeline loads and inspects the preloader in the launcher process only; the
+official Minecraft app remains separate.
 
-See [RUNTIME_INTEGRATION.md](RUNTIME_INTEGRATION.md) for call order and the
+This repository still needs a licensed/user-supplied game APK import path, a
+launcher-owned Minecraft Activity/runtime compatibility layer, and the
+per-version game package preparation needed to run a custom runtime. The
+bridge is the integration seam, not a claim that stock Minecraft is already
+co-loaded.
+
+See [RUNTIME_INTEGRATION.md](RUNTIME_INTEGRATION.md) for call order and
 remaining prerequisites.
