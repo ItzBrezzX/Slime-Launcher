@@ -2,6 +2,7 @@ package com.kingbrezz.slime.data
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.content.pm.PackageManager
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -10,6 +11,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import com.kingbrezz.slime.native.InjectEngine
 import com.kingbrezz.slime.native.PreloaderNative
+import com.kingbrezz.slime.runtime.ImportedMinecraftRuntime
+import com.kingbrezz.slime.runtime.MinecraftRuntimeInstaller
 import kotlinx.coroutines.flow.update
 
 class SlimeRepository(context: Context) {
@@ -17,6 +20,10 @@ class SlimeRepository(context: Context) {
     private val prefs = app.getSharedPreferences("slime_v1", Context.MODE_PRIVATE)
     private val gson = Gson()
     private val injectEngine = InjectEngine(app)
+    private val runtimeInstaller = MinecraftRuntimeInstaller(app)
+
+    private val _runtimeInstall = MutableStateFlow(runtimeInstaller.current())
+    val runtimeInstall: StateFlow<ImportedMinecraftRuntime?> = _runtimeInstall.asStateFlow()
 
     private val _lastInject = MutableStateFlow<InjectEngine.Result?>(null)
     val lastInject: StateFlow<InjectEngine.Result?> = _lastInject.asStateFlow()
@@ -69,6 +76,31 @@ class SlimeRepository(context: Context) {
 
     init {
         syncNative()
+    }
+
+    /** Imports user-selected base/split Minecraft APKs into Slime's private runtime storage. */
+    fun importMinecraftApks(uris: List<Uri>) {
+        try {
+            val runtime = runtimeInstaller.importApks(uris)
+            _runtimeInstall.value = runtime
+            val message = "Minecraft ${runtime.manifest.versionName} disiapkan · ABI ${runtime.manifest.abi} · ${runtime.manifest.nativeLibraries.size} native libraries"
+            log(message)
+            flash(message + ". Java game Activity belum tersedia.")
+        } catch (error: Throwable) {
+            val message = error.message ?: error.javaClass.simpleName
+            log("Impor Minecraft gagal: $message")
+            flash("Impor gagal: $message")
+        }
+    }
+
+    fun removeMinecraftRuntime() {
+        if (runtimeInstaller.removeCurrent()) {
+            _runtimeInstall.value = null
+            log("Runtime Minecraft impor dihapus")
+            flash("Runtime Minecraft dihapus")
+        } else {
+            flash("Runtime Minecraft gagal dihapus")
+        }
     }
 
     fun activeVersion(): McVersion? = _versions.value.find { it.id == _activeVersionId.value }
