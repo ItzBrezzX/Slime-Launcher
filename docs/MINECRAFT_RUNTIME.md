@@ -11,22 +11,37 @@ The original installed package remains untouched. Slime reads its installed APK/
 Implemented on this branch:
 
 - Discover `com.mojang.minecraftpe` and read its version, base APK, split APKs, native-library directory and supported ABI.
-- Select the ABI of the Slime process.
-- Extract the currently enumerated game libraries from the installed package into Slime-private storage.
-- Validate ELF machine type and file size before publishing a staged library.
-- Reuse a manifest-validated cache.
-- Include LeviLauncher's Apache-2.0-licensed `:minecraft` Android library module and package its `libgxcore.so` bridge binary.
-- Build the Android debug APK and run the native host tests in CI.
+- Extract the currently enumerated game libraries into Slime-private storage, validate ELF machine type and reuse a manifest-validated cache.
+- Include LeviLauncher's Apache-2.0-licensed `:minecraft` Android library module at the pinned submodule revision.
+- Add `MinecraftActivity`, derived from `com.mojang.minecraftpe.MainActivity`.
+- Add `MinecraftActivitySession` to combine the installed base/split APK assets with Slime's resources and provide version/ABI-scoped files, data, external-files, cache and database directories.
+- Align the app's AndroidX Games Activity, Activity/Lifecycle and Java/Kotlin bytecode targets with the pinned runtime module.
 
 Not implemented yet:
 
-- A Slime-owned Activity derived from `com.mojang.minecraftpe.MainActivity`.
-- A Slime runtime manager that prepares assets, storage directories and native dependencies before the game Activity calls `super.onCreate()`.
-- The JNI shim used to call the packaged `gxcore` runtime bridge.
-- An in-process Compose overlay for the Slime Mod Menu.
+- The version-specific native dependency loader and the JNI shim used by the pinned `gxcore` bridge.
+- Enabling/launching `MinecraftActivity`. Its manifest component is intentionally `enabled=false` until native libraries and the GameActivity native entry point are loaded and verified.
+- The in-process Slime Mod Menu overlay attached to the game Activity.
 - Version-tested native hook signatures and actual detour functions.
+- Device verification that Minecraft reaches its first rendered frame inside Slime.
 
-The current Play action still runs the old demo/stock-launch path. A successful APK build is not proof of an in-process Minecraft launch.
+The Play action still follows the existing launcher/demo path. A successful APK build is not proof of an in-process Minecraft launch.
+
+## Build compatibility contract
+
+The app and the pinned `:minecraft` module use:
+
+| Setting | Value |
+|---|---|
+| compile SDK | 36 |
+| min SDK | 26 |
+| Android Gradle Plugin | 8.13.2 |
+| Gradle | 8.13 |
+| Kotlin | 2.3.0 |
+| Java/Kotlin bytecode target | 21 |
+| AndroidX Games Activity | 4.4.2 |
+
+The app declares `androidx.games:games-activity:4.4.2` directly because the Mojang Activity's public superclass is AndroidX `GameActivity`, while the upstream library module declares that dependency as `implementation`. Activity and Lifecycle versions are aligned with the versions catalog in the pinned LeviLauncher revision. CI runs on JDK 21.
 
 ## Runtime phases
 
@@ -54,13 +69,13 @@ The current source enumerates these game libraries:
 - `libminecraftpe.so`
 - `libHttpClient.Android.so` for versions at or above the current threshold in `MinecraftInstalledSource`
 
-Every staged ELF must match the process ABI. The manifest must include the exact Minecraft version, package update metadata, APK/split identities, ABI and required-library list. A missing dependency is a hard failure, not a warning that lets launch continue.
+Every staged ELF must match the process ABI. A missing required dependency is a hard failure, not a warning that lets launch continue.
 
 ### 3. Resolve the native dependency graph
 
 Do not simply call `System.load("libminecraftpe.so")` first. Use the pinned LeviLauncher runtime as the version-specific reference for dependency order.
 
-At the pinned LeviLauncher revision `d544df8cafab731ba7686dfb88951602f13293ef`, its runtime has additional version gates:
+At pinned LeviLauncher revision `d544df8cafab731ba7686dfb88951602f13293ef`, its runtime has additional version gates:
 
 - MAE SDK initialization begins at Minecraft 1.21.110 (with a separate beta threshold).
 - HttpClient and PlayFab loading begins at Minecraft 1.21.130 (with a separate beta threshold).
@@ -72,24 +87,24 @@ The JNI bridge shim must use the exact class and native method contract expected
 
 ### 4. Start a same-process Minecraft Activity
 
-Add a non-exported Activity in Slime's manifest that derives from the included `com.mojang.minecraftpe.MainActivity` class.
+The Activity is now implemented at `app/src/main/java/com/kingbrezz/slime/runtime/MinecraftActivity.kt` and is declared non-exported in the app manifest.
 
-Before calling the Mojang Activity's `super.onCreate()`, the host must:
+Before the Mojang Activity's `super.onCreate()`, the runtime bootstrap must:
 
-1. consume a fully prepared runtime session;
-2. attach the AssetManager containing the installed base APK and split APK paths;
-3. provide version-scoped files, data, cache and external-files directories;
-4. verify all required native dependencies are already loaded in the Slime process.
+1. inspect the installed package and call `MinecraftActivitySession.prepare(context, info)`;
+2. load and verify every required native dependency in the Slime process;
+3. provide the verified GameActivity native entry-point metadata;
+4. enable the `MinecraftActivity` manifest component and launch it in the default Slime process.
 
-Override the same storage accessors used by LeviLauncher's host (`getAssets`, `getFilesDir`, `getDataDir`, `getExternalFilesDir`, `getDatabasePath` and `getCacheDir`). Keep the activity in the default Slime process; adding an `android:process` attribute would defeat in-process loading.
+The session attaches the installed base and split APK paths to an AssetManager, followed by Slime's own APK paths. It creates isolated version/ABI-scoped storage directories and overrides `getAssets()`, `getFilesDir()`, `getDataDir()`, `getExternalFilesDir()`, `getDatabasePath()` and `getCacheDir()` before Mojang's Activity lifecycle begins.
 
-Use the game Activity's real lifecycle and touch surface. Do not navigate to the demo `SessionScreen` after the launch request succeeds.
+**Current gate:** the manifest has `android:enabled="false"` on `MinecraftActivity`. Do not enable it before the native loader stage supplies the correct `android.app.lib_name` contract and confirms the game dependencies are loaded. The Activity remains in the default app process; do not add `android:process`.
 
 ### 5. Attach Slime's overlay and preloader
 
 After `libminecraftpe.so` is mapped in the Slime process:
 
-- initialize `PreloaderNative` again against the loaded game image;
+- initialize `PreloaderNative` against the loaded game image;
 - require `targetFound == true` before any target scan or hook attempt;
 - attach a ComposeView-based Mod Menu overlay to the game Activity;
 - keep module settings and runtime state in the shared Slime repository.
@@ -100,7 +115,7 @@ The current C++ hook registry has a ShadowHook backend but its default hooks do 
 
 `Idle -> Inspecting -> Staging -> ResolvingDependencies -> LoadingNative -> StartingActivity -> Running`
 
-Any phase may transition to `Failed` with the exact missing package, file, ABI, dependency or native error. `Running` is set only after the host Activity reaches its ready callback and the native status confirms the game target is mapped in the same process.
+Any phase may transition to `Failed` with the exact missing package, file, ABI, dependency or native error. `Running` is set only after the host Activity reaches its ready callback and native status confirms the game target is mapped in the same process.
 
 A degraded preloader may allow a game session to continue without hooks, but the UI must distinguish that from a fully hook-ready session.
 
@@ -108,17 +123,17 @@ A degraded preloader may allow a game session to continue without hooks, but the
 
 - No root, ptrace, cross-process memory write or modification of the installed Minecraft APK.
 - No bypass of Minecraft licensing, purchase checks or account authentication.
-- Do not package proprietary game libraries in the public repository; stage the user's installed copy locally.
+- Do not package proprietary game libraries in the public repository; stage the user's installed copy.
 - Do not bundle PlayFab/MAE or other launcher-side binaries until their redistribution rights are confirmed.
 - Gate launch on a tested ABI/version matrix. Unknown versions must fail closed.
 - Keep the original external-launch option separate from the in-process host. It must never be labelled as an injected Slime session.
 
 ## Verification checklist
 
-1. CI: native host tests and Android debug build pass.
-2. Unit tests: package/split discovery, version gates, ELF ABI checks, stale cache invalidation and missing-library errors.
-3. Instrumented ARM64 device: confirm the detected version/ABI matches Android PackageManager.
-4. Runtime logs: confirm each native library's load order and result.
-5. Activity logs: confirm Mojang `MainActivity.onCreate()` completes and Minecraft renders its first frame.
-6. Preloader: confirm `libminecraftpe.so` appears in Slime's process maps before scanning.
-7. Hook tests: require a known-good signature and a registered detour for the exact tested build before reporting a hook as active.
+1. CI native host tests and Android debug build pass.
+2. Unit tests cover package/split discovery, version gates, ELF ABI checks, stale cache invalidation and missing-library errors.
+3. On an ARM64 device, confirm detected version/ABI matches Android PackageManager.
+4. Runtime logs confirm each native library's load order and result.
+5. Activity logs confirm Mojang `MainActivity.onCreate()` completes and Minecraft renders its first frame.
+6. Confirm `libminecraftpe.so` appears in Slime's process maps before scanning.
+7. Hook tests require a known-good signature and a registered detour for the exact tested build before reporting a hook as active.
