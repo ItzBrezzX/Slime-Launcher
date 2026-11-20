@@ -18,9 +18,17 @@ int main() {
     assert(first.minHeight >= 8);
     assert(first.maxHeight < slime::bedrock::Engine::kWorldHeight);
 
-    const auto top = engine.blockAt(0, first.maxHeight, 0);
-    assert(top == slime::bedrock::BlockId::Grass ||
-           top == slime::bedrock::BlockId::Dirt);
+    int surfaceY = -1;
+    for (int y = slime::bedrock::Engine::kWorldHeight - 1; y >= 0; --y) {
+        const auto block = engine.blockAt(0, y, 0);
+        if (block != slime::bedrock::BlockId::Air &&
+            block != slime::bedrock::BlockId::Water) {
+            surfaceY = y;
+            break;
+        }
+    }
+    assert(surfaceY >= 0);
+    assert(engine.blockAt(0, surfaceY, 0) == slime::bedrock::BlockId::Grass);
 
     engine.createWorld(123456789LL);
     assert(engine.loadedChunkCount() == 0);
