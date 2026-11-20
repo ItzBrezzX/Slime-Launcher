@@ -554,13 +554,20 @@ bool VulkanBackend::render() {
 #else
     if (!state_ || !state_->surfaceReady || !state_->pipeline) return false;
     VkResult result = vkWaitForFences(state_->device, 1, &state_->inFlight, VK_TRUE, UINT64_MAX);
-    if (result != VK_SUCCESS) return false;
+    if (result != VK_SUCCESS) { state_->surfaceReady = false; return false; }
     uint32_t imageIndex = 0;
     result = vkAcquireNextImageKHR(state_->device, state_->swapchain, UINT64_MAX,
                                    state_->imageAvailable, VK_NULL_HANDLE, &imageIndex);
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-        if (!state_->recreateSwapchain()) { state_->surfaceReady = false; return false; }
-        return render();
+        if (state_->swapchainRecoveryAttempts >= 1 || !state_->recreateSwapchain()) {
+            state_->swapchainRecoveryAttempts = 0;
+            state_->surfaceReady = false;
+            return false;
+        }
+        ++state_->swapchainRecoveryAttempts;
+        const bool recovered = render();
+        state_->swapchainRecoveryAttempts = 0;
+        return recovered;
     }
     if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
         state_->surfaceReady = false;
@@ -628,10 +635,22 @@ bool VulkanBackend::render() {
         return false;
     }
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
-        if (!state_->recreateSwapchain()) { state_->surfaceReady = false; return false; }
-        return render();
+        if (state_->swapchainRecoveryAttempts >= 1 || !state_->recreateSwapchain()) {
+            state_->swapchainRecoveryAttempts = 0;
+            state_->surfaceReady = false;
+            return false;
+        }
+        ++state_->swapchainRecoveryAttempts;
+        const bool recovered = render();
+        state_->swapchainRecoveryAttempts = 0;
+        return recovered;
     }
-    return result == VK_SUCCESS;
+    if (result != VK_SUCCESS) {
+        state_->surfaceReady = false;
+        return false;
+    }
+    state_->swapchainRecoveryAttempts = 0;
+    return true;
 #endif
 }
 
