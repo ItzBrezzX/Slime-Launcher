@@ -132,7 +132,7 @@ class BedrockEngineActivity : ComponentActivity() {
         runCatching {
             val info = VulkanBackendNative.initialize()
             vulkanInfo.value = if (info.available) {
-                "Vulkan siap: ${info.deviceName} · API ${info.apiVersion} · driver ${info.driverVersion} · device-local ${info.deviceLocalMemoryMiB} MiB · queue ${info.deviceType}"
+                "Vulkan siap: ${info.deviceName} · API ${info.apiVersion} · driver ${info.driverVersion} · device-local ${info.deviceLocalMemoryMiB} MiB · graphics queue family ${info.graphicsQueueFamily} · GPU type ${info.deviceType}"
             } else {
                 "Vulkan tidak tersedia: ${info.status}"
             }
