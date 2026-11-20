@@ -9,6 +9,7 @@
 
 namespace slime::bedrock {
 namespace {
+#ifdef __ANDROID__
 std::string versionString(uint32_t version) {
     char value[32]{};
     std::snprintf(value, sizeof(value), "%u.%u.%u",
@@ -16,6 +17,7 @@ std::string versionString(uint32_t version) {
                   VK_VERSION_PATCH(version));
     return value;
 }
+#endif
 }
 
 struct VulkanBackend::State {
