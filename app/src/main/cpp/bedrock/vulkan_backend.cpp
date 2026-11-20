@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstddef>
+#include <cmath>
 #include <cstring>
 #include <new>
 #include <string>
@@ -56,6 +57,9 @@ struct VulkanBackend::State {
     VkBuffer indexBuffer = VK_NULL_HANDLE;
     VkDeviceMemory indexMemory = VK_NULL_HANDLE;
     uint32_t indexCount = 0;
+    float cameraYaw = 0.785398163F;
+    float cameraPitch = 0.65F;
+    float cameraZoom = 1.0F;
     VkSemaphore imageAvailable = VK_NULL_HANDLE;
     VkSemaphore renderFinished = VK_NULL_HANDLE;
     VkFence inFlight = VK_NULL_HANDLE;
@@ -258,7 +262,13 @@ struct VulkanBackend::State {
         VkDynamicState dynamics[2] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
         VkPipelineDynamicStateCreateInfo dynamic{VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
         dynamic.dynamicStateCount = 2; dynamic.pDynamicStates = dynamics;
+        VkPushConstantRange cameraRange{};
+        cameraRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        cameraRange.offset = 0;
+        cameraRange.size = sizeof(float) * 4;
         VkPipelineLayoutCreateInfo layout{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+        layout.pushConstantRangeCount = 1;
+        layout.pPushConstantRanges = &cameraRange;
         if (vkCreatePipelineLayout(device, &layout, nullptr, &pipelineLayout) != VK_SUCCESS) return false;
         VkGraphicsPipelineCreateInfo info{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
         info.stageCount = 2; info.pStages = stages;
@@ -528,6 +538,13 @@ bool VulkanBackend::render() {
     vkCmdSetViewport(state_->commandBuffer, 0, 1, &viewport);
     vkCmdSetScissor(state_->commandBuffer, 0, 1, &scissor);
     vkCmdBindPipeline(state_->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, state_->pipeline);
+    const float aspect = state_->extent.height > 0
+        ? static_cast<float>(state_->extent.width) / static_cast<float>(state_->extent.height)
+        : 1.0F;
+    const float camera[4] = {state_->cameraYaw, state_->cameraPitch,
+                             state_->cameraZoom, aspect};
+    vkCmdPushConstants(state_->commandBuffer, state_->pipelineLayout,
+                       VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(camera), camera);
     const VkDeviceSize offset = 0;
     vkCmdBindVertexBuffers(state_->commandBuffer, 0, 1, &state_->vertexBuffer, &offset);
     vkCmdBindIndexBuffer(state_->commandBuffer, state_->indexBuffer, 0, VK_INDEX_TYPE_UINT32);
@@ -550,6 +567,18 @@ bool VulkanBackend::render() {
     // A single present semaphore is reused; wait for the present queue to consume it.
     vkQueueWaitIdle(state_->graphicsQueue);
     return result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR;
+#endif
+}
+
+void VulkanBackend::setCamera(float yaw, float pitch, float zoom) {
+#ifdef __ANDROID__
+    if (!state_) return;
+    if (!std::isfinite(yaw) || !std::isfinite(pitch) || !std::isfinite(zoom)) return;
+    state_->cameraYaw = yaw;
+    state_->cameraPitch = std::clamp(pitch, 0.15F, 1.35F);
+    state_->cameraZoom = std::clamp(zoom, 0.55F, 2.5F);
+#else
+    (void)yaw; (void)pitch; (void)zoom;
 #endif
 }
 
