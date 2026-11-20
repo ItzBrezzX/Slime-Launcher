@@ -226,10 +226,18 @@ struct VulkanBackend::State {
 
     bool createPipeline(const std::vector<uint32_t>& vert, const std::vector<uint32_t>& frag) {
         VkShaderModuleCreateInfo shader{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
-        shader.codeSize = vert.size() * sizeof(uint32_t); shader.pCode = vert.data();
-        if (vkCreateShaderModule(device, &shader, nullptr, &vertexModule) != VK_SUCCESS) return false;
-        shader.codeSize = frag.size() * sizeof(uint32_t); shader.pCode = frag.data();
-        if (vkCreateShaderModule(device, &shader, nullptr, &fragmentModule) != VK_SUCCESS) return false;
+        if (vertexModule == VK_NULL_HANDLE) {
+            shader.codeSize = vert.size() * sizeof(uint32_t);
+            shader.pCode = vert.data();
+            if (vkCreateShaderModule(device, &shader, nullptr, &vertexModule) != VK_SUCCESS)
+                return false;
+        }
+        if (fragmentModule == VK_NULL_HANDLE) {
+            shader.codeSize = frag.size() * sizeof(uint32_t);
+            shader.pCode = frag.data();
+            if (vkCreateShaderModule(device, &shader, nullptr, &fragmentModule) != VK_SUCCESS)
+                return false;
+        }
         VkPipelineShaderStageCreateInfo stages[2]{};
         stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT; stages[0].module = vertexModule; stages[0].pName = "main";
