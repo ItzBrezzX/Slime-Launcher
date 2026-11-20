@@ -18,4 +18,6 @@ g++ -std=c++20 -Wall -Wextra -Werror -I"$SRC/bedrock" "$SRC/bedrock/bedrock_engi
 ./test_main 2>/dev/null
 SLIME_FAKE_MC="$OUT/libminecraftpe.so" ./test_ready 2>/dev/null
 ./test_bedrock_engine
+g++ $FLAGS "$SRC/bedrock/vulkan_backend.cpp" "$HERE/test_vulkan_backend.cpp" -o test_vulkan_backend
+./test_vulkan_backend
 echo "NATIVE TESTS OK"
