@@ -4,11 +4,31 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val vulkanShaderAssets = layout.buildDirectory.dir("generated/vulkanAssets")
+val vertexShaderSource = layout.projectDirectory.file("src/main/shaders/bedrock.vert")
+val fragmentShaderSource = layout.projectDirectory.file("src/main/shaders/bedrock.frag")
+val vertexShaderOutput = vulkanShaderAssets.map { it.file("shaders/bedrock.vert.spv") }
+val fragmentShaderOutput = vulkanShaderAssets.map { it.file("shaders/bedrock.frag.spv") }
+
+val compileBedrockVertexShader by tasks.registering(Exec::class) {
+    inputs.file(vertexShaderSource)
+    outputs.file(vertexShaderOutput)
+    doFirst { vertexShaderOutput.get().asFile.parentFile.mkdirs() }
+    commandLine("glslangValidator", "-V", "--target-env", "vulkan1.0",
+        "-o", vertexShaderOutput.get().asFile.absolutePath, vertexShaderSource.asFile.absolutePath)
+}
+val compileBedrockFragmentShader by tasks.registering(Exec::class) {
+    inputs.file(fragmentShaderSource)
+    outputs.file(fragmentShaderOutput)
+    doFirst { fragmentShaderOutput.get().asFile.parentFile.mkdirs() }
+    commandLine("glslangValidator", "-V", "--target-env", "vulkan1.0",
+        "-o", fragmentShaderOutput.get().asFile.absolutePath, fragmentShaderSource.asFile.absolutePath)
+}
+
 android {
     namespace = "com.kingbrezz.slime"
     compileSdk = 36
     ndkVersion = "27.0.12077973"
-
     defaultConfig {
         applicationId = "com.kingbrezz.slime"
         minSdk = 26
@@ -16,94 +36,61 @@ android {
         versionCode = 15
         versionName = "1.5.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
         externalNativeBuild {
             cmake {
                 cppFlags += listOf("-std=c++20")
                 arguments += listOf("-DANDROID_STL=c++_shared")
             }
         }
-
-        // Levi's Android Preloader currently supports ARMv7 and ARM64 only.
-        ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
-        }
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
-
     sourceSets {
         getByName("main") {
-            // Upstream bundled Android runtime bridge libraries (gxcore, PlayFab, MAE SDK).
             jniLibs.srcDir(rootProject.file("third_party/LeviLauncher-Android/app/src/main/jniLibs"))
+            assets.srcDir(vulkanShaderAssets)
         }
     }
-
     buildTypes {
         release {
             isMinifyEnabled = false
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
         }
     }
-
     compileOptions {
-        // Match the pinned LeviLauncher :minecraft module and CI JDK.
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
     }
-    buildFeatures {
-        compose = true
-        buildConfig = true
-        prefab = true
-    }
+    buildFeatures { compose = true; buildConfig = true; prefab = true }
     packaging {
         jniLibs {
-            // Keep only the licensed gxcore runtime bridge from Levi's bundled native libraries.
-            excludes += listOf(
-                "**/libPlayFabMultiplayer.so",
-                "**/libinbuiltmods.so",
-                "**/libmaesdk.so",
-            )
+            excludes += listOf("**/libPlayFabMultiplayer.so", "**/libinbuiltmods.so", "**/libmaesdk.so")
         }
         resources {
             excludes += listOf(
-                "/META-INF/{AL2.0,LGPL2.1}",
-                "/META-INF/DEPENDENCIES",
-                "/META-INF/NOTICE",
-                "/META-INF/NOTICE.txt",
-                "/META-INF/LICENSE",
-                "/META-INF/LICENSE.txt",
-                "/META-INF/license.txt",
+                "/META-INF/{AL2.0,LGPL2.1}", "/META-INF/DEPENDENCIES",
+                "/META-INF/NOTICE", "/META-INF/NOTICE.txt", "/META-INF/LICENSE",
+                "/META-INF/LICENSE.txt", "/META-INF/license.txt"
             )
         }
     }
-
     externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
-        }
+        cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" }
     }
 }
-
+tasks.named("preBuild").configure {
+    dependsOn(compileBedrockVertexShader, compileBedrockFragmentShader)
+}
 dependencies {
     implementation(project(":minecraft"))
-
-    // MainActivity in :minecraft extends AndroidX GameActivity. Keep the
-    // direct compile dependency at the exact version pinned by LeviLauncher.
     implementation("androidx.games:games-activity:4.4.2")
-    // Expose the pinned Mojang Activity superclass chain to the app compile classpath.
     implementation("androidx.appcompat:appcompat:1.7.1")
-
     val composeBom = platform("androidx.compose:compose-bom:2024.10.01")
     implementation(composeBom)
     androidTestImplementation(composeBom)
-
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.activity:activity-compose:1.12.2")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
@@ -117,15 +104,10 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("com.google.code.gson:gson:2.11.0")
     implementation("com.bytedance.android:shadowhook:2.0.0")
-
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
-
     testImplementation("junit:junit:4.13.2")
 }
-
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
-    compilerOptions {
-        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
-    }
+    compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21) }
 }
