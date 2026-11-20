@@ -126,10 +126,29 @@ bool Engine::generateChunk(int cx, int cz) {
 BlockId Engine::blockAt(int x,int y,int z) const {
     std::lock_guard<std::mutex> lock(mutex_); return blockAtUnlocked(x,y,z);
 }
+uint32_t Engine::visibleFaceCountUnlocked(int cx,int cz) const {
+    const auto it=chunks_.find(chunkKey(cx,cz));
+    if(it==chunks_.end()) return 0;
+    constexpr int dx[6]={1,-1,0,0,0,0}, dy[6]={0,0,1,-1,0,0}, dz[6]={0,0,0,0,1,-1};
+    uint32_t visible=0;
+    for(int y=0;y<kWorldHeight;++y) for(int z=0;z<kChunkSize;++z)
+        for(int x=0;x<kChunkSize;++x) {
+            const auto block=static_cast<BlockId>(it->second.blocks[blockIndex(x,y,z)]);
+            if(block==BlockId::Air) continue;
+            for(int face=0;face<6;++face) {
+                if(blockAtUnlocked(cx*kChunkSize+x+dx[face],y+dy[face],
+                                   cz*kChunkSize+z+dz[face])==BlockId::Air) ++visible;
+            }
+        }
+    return visible;
+}
 ChunkStats Engine::chunkStats(int x,int z) const {
     std::lock_guard<std::mutex> lock(mutex_);
     const auto it=chunks_.find(chunkKey(x,z));
-    return it==chunks_.end()?ChunkStats{}:it->second.stats;
+    if(it==chunks_.end()) return {};
+    ChunkStats result=it->second.stats;
+    result.visibleFaces=visibleFaceCountUnlocked(x,z);
+    return result;
 }
 ChunkMesh Engine::buildChunkMesh(int cx,int cz) const {
     std::lock_guard<std::mutex> lock(mutex_);
