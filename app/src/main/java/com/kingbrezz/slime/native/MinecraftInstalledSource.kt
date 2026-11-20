@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Process
 import com.kingbrezz.slime.data.Catalog
+import com.kingbrezz.slime.runtime.MinecraftRuntimeVersionPolicy
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -235,37 +236,9 @@ object MinecraftInstalledSource {
         }
     }
 
-    private fun requiredLibraries(versionName: String): List<String> = buildList {
-        add("libc++_shared.so")
-        add("libfmod.so")
-        add("libMediaDecoders_Android.so")
-        if (versionAtLeast(versionName, "1.26.70.0")) add("libMallocRedirect.so")
-        add("libminecraftpe.so")
-        if (versionAtLeast(versionName, "1.21.130")) add("libHttpClient.Android.so")
-    }
-
-    private fun versionAtLeast(raw: String, minimum: String): Boolean {
-        fun parse(value: String): List<Long>? {
-            val normalized = value.trim().removePrefix("v")
-                .let { if (it.startsWith("26.")) "1." + it else it }
-            val tokens = normalized.split(".")
-            if (tokens.isEmpty()) return null
-            val values = mutableListOf<Long>()
-            for (token in tokens) {
-                val number = token.toLongOrNull() ?: return null
-                values.add(number)
-            }
-            return values
-        }
-        val current = parse(raw) ?: return false
-        val target = parse(minimum) ?: return false
-        for (index in 0 until maxOf(current.size, target.size)) {
-            val left = current.getOrElse(index) { 0L }
-            val right = target.getOrElse(index) { 0L }
-            if (left != right) return left > right
-        }
-        return true
-    }
+    private fun requiredLibraries(versionName: String): List<String> =
+        MinecraftRuntimeVersionPolicy.requiredGameLibraries(versionName)
+            ?: throw IOException("Format versi Minecraft tidak dikenali: $versionName")
 
     private fun stageLibrary(info: Info, name: String, target: File): Boolean {
         val nativeFile = info.nativeLibraryDir.takeIf { it.isNotBlank() }?.let { File(it, name) }
