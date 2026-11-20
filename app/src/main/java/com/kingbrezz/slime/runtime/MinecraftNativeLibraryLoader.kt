@@ -62,7 +62,14 @@ object MinecraftNativeLibraryLoader {
     @Synchronized
     @SuppressLint("UnsafeDynamicallyLoadedCode")
     fun load(context: Context, runtime: ImportedMinecraftRuntime): Result {
-        cachedResult?.let { return it }
+        cachedResult?.let { previous ->
+            // A successful load is process-wide. A partial native load cannot be
+            // rolled back safely and must keep requiring a process restart.
+            if (previous.complete || previous.requiresProcessRestart) return previous
+        }
+        // Validation failures before the first System.load are retryable (for
+        // example after re-importing a corrected APK) and must not be memoized.
+        cachedResult = null
 
         val app = context.applicationContext
         val pid = Process.myPid()
@@ -72,7 +79,7 @@ object MinecraftNativeLibraryLoader {
         val loadedThisCall = mutableListOf<String>()
 
         fun fail(message: String): Result {
-            return Result(
+            val result = Result(
                 abi = abi.ifBlank { runtime.manifest.abi },
                 processName = processName,
                 processId = pid,
@@ -81,7 +88,9 @@ object MinecraftNativeLibraryLoader {
                 complete = false,
                 requiresProcessRestart = loadedPaths.isNotEmpty(),
                 error = message,
-            ).also { cachedResult = it }
+            )
+            cachedResult = result.takeIf { it.requiresProcessRestart }
+            return result
         }
 
         if (runtime.manifest.packageName != "com.mojang.minecraftpe") {
