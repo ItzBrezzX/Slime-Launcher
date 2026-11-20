@@ -67,6 +67,7 @@ private:
     static double smoothNoise(int64_t seed, double x, double z);
     int terrainHeight(int worldX, int worldZ) const;
     BlockId blockAtUnlocked(int worldX, int y, int worldZ) const;
+    uint32_t visibleFaceCountUnlocked(int chunkX, int chunkZ) const;
 
     mutable std::mutex mutex_;
     int64_t seed_ = 0;
