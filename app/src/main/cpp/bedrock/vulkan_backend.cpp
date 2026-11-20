@@ -62,6 +62,7 @@ struct VulkanBackend::State {
     float cameraYaw = 0.785398163F;
     float cameraPitch = 0.65F;
     float cameraZoom = 1.0F;
+    uint32_t swapchainRecoveryAttempts = 0;
     VkSemaphore imageAvailable = VK_NULL_HANDLE;
     VkSemaphore renderFinished = VK_NULL_HANDLE;
     VkFence inFlight = VK_NULL_HANDLE;
@@ -561,10 +562,19 @@ bool VulkanBackend::render() {
         if (!state_->recreateSwapchain()) { state_->surfaceReady = false; return false; }
         return render();
     }
-    if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) return false;
-    vkResetCommandBuffer(state_->commandBuffer, 0);
+    if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+        state_->surfaceReady = false;
+        return false;
+    }
+    if (vkResetCommandBuffer(state_->commandBuffer, 0) != VK_SUCCESS) {
+        state_->surfaceReady = false;
+        return false;
+    }
     VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-    if (vkBeginCommandBuffer(state_->commandBuffer, &begin) != VK_SUCCESS) return false;
+    if (vkBeginCommandBuffer(state_->commandBuffer, &begin) != VK_SUCCESS) {
+        state_->surfaceReady = false;
+        return false;
+    }
     VkClearValue clear[2]{};
     clear[0].color = {{0.035F, 0.055F, 0.075F, 1.0F}};
     clear[1].depthStencil = {1.0F, 0};
@@ -592,8 +602,11 @@ bool VulkanBackend::render() {
         vkCmdDrawIndexed(state_->commandBuffer, state_->indexCount, 1, 0, 0, 0);
     }
     vkCmdEndRenderPass(state_->commandBuffer);
-    if (vkEndCommandBuffer(state_->commandBuffer) != VK_SUCCESS) return false;
-    vkResetFences(state_->device, 1, &state_->inFlight);
+    if (vkEndCommandBuffer(state_->commandBuffer) != VK_SUCCESS ||
+        vkResetFences(state_->device, 1, &state_->inFlight) != VK_SUCCESS) {
+        state_->surfaceReady = false;
+        return false;
+    }
     const VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
     submit.waitSemaphoreCount = 1; submit.pWaitSemaphores = &state_->imageAvailable;
@@ -610,7 +623,10 @@ bool VulkanBackend::render() {
     present.pImageIndices = &imageIndex;
     result = vkQueuePresentKHR(state_->graphicsQueue, &present);
     // Wait until presentation has consumed the semaphore before reusing or replacing it.
-    vkQueueWaitIdle(state_->graphicsQueue);
+    if (vkQueueWaitIdle(state_->graphicsQueue) != VK_SUCCESS) {
+        state_->surfaceReady = false;
+        return false;
+    }
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
         if (!state_->recreateSwapchain()) { state_->surfaceReady = false; return false; }
         return render();
