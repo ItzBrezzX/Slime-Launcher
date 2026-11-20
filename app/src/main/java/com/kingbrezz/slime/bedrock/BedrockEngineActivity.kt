@@ -32,6 +32,7 @@ class BedrockEngineActivity : ComponentActivity() {
     private val status = mutableStateOf("Engine belum diinisialisasi.")
     private val stats = mutableStateOf<ChunkStats?>(null)
     private val meshInfo = mutableStateOf("Mesh belum dibuat.")
+    private val vulkanInfo = mutableStateOf("Vulkan belum diperiksa.")
     private val seed = mutableStateOf(System.currentTimeMillis())
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -60,6 +61,7 @@ class BedrockEngineActivity : ComponentActivity() {
                             Text("Terrain height: ${chunk.minHeight}–${chunk.maxHeight}", color = Fg, fontSize = 14.sp)
                             Text(meshInfo.value, color = Fg, fontSize = 13.sp)
                         }
+                        Text(vulkanInfo.value, color = if (vulkanInfo.value.startsWith("Vulkan siap")) SlimeGreen else Muted, fontSize = 12.sp)
                         Text(status.value, color = Muted, fontSize = 12.sp)
                         Spacer(Modifier.weight(1f))
                         Button(
@@ -68,6 +70,13 @@ class BedrockEngineActivity : ComponentActivity() {
                             shape = RoundedCornerShape(10.dp),
                         ) {
                             Text("Generate spawn chunks (3 × 3)")
+                        }
+                        OutlinedButton(
+                            onClick = ::initializeVulkan,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp),
+                        ) {
+                            Text("Initialize Vulkan GPU")
                         }
                         OutlinedButton(
                             onClick = ::resetWorld,
@@ -119,6 +128,19 @@ class BedrockEngineActivity : ComponentActivity() {
         }
     }
 
+    private fun initializeVulkan() {
+        runCatching {
+            val info = VulkanBackendNative.initialize()
+            vulkanInfo.value = if (info.available) {
+                "Vulkan siap: ${info.deviceName} · API ${info.apiVersion} · driver ${info.driverVersion} · device-local ${info.deviceLocalMemoryMiB} MiB · queue ${info.deviceType}"
+            } else {
+                "Vulkan tidak tersedia: ${info.status}"
+            }
+        }.onFailure {
+            vulkanInfo.value = "Vulkan error: ${it.message}"
+        }
+    }
+
     private fun resetWorld() {
         runCatching {
             BedrockEngineNative.reset()
@@ -133,7 +155,10 @@ class BedrockEngineActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        if (isFinishing) runCatching { BedrockEngineNative.reset() }
+        if (isFinishing) {
+            runCatching { VulkanBackendNative.nativeShutdown() }
+            runCatching { BedrockEngineNative.reset() }
+        }
         super.onDestroy()
     }
 }
