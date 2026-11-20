@@ -7,6 +7,7 @@ object VulkanBackendNative {
     external fun nativeAttachSurface(surface: android.view.Surface, vertexShader: ByteArray, fragmentShader: ByteArray): String
     external fun nativeSetMesh(vertices: FloatArray, indices: IntArray): Boolean
     external fun nativeRender(): Boolean
+    external fun nativeSetCamera(yaw: Float, pitch: Float, zoom: Float)
     external fun nativeDetachSurface()
     external fun nativeShutdown()
 }
