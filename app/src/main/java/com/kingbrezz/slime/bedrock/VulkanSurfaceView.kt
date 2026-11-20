@@ -98,6 +98,7 @@ class VulkanSurfaceView(
         if (!attached) return true
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                parent?.requestDisallowInterceptTouchEvent(true)
                 lastTouchX = event.x
                 lastTouchY = event.y
                 lastPinchDistance = 0f
@@ -140,6 +141,7 @@ class VulkanSurfaceView(
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 lastPinchDistance = 0f
+                parent?.requestDisallowInterceptTouchEvent(false)
                 return true
             }
         }
