@@ -4,12 +4,12 @@ import android.content.Context
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 
-/** SurfaceView bridge: owns the Android Surface lifecycle and submits the current chunk mesh. */
+/** Owns Android Surface lifecycle and presents the current chunk mesh through Vulkan. */
 class VulkanSurfaceView(
     context: Context,
     private val onStatus: (String) -> Unit,
 ) : SurfaceView(context), SurfaceHolder.Callback {
-    private var shaders: Pair<ByteArray, ByteArray>? = null
+    private val appContext = context
     private var mesh: ChunkMeshData? = null
     private var attached = false
 
@@ -21,28 +21,24 @@ class VulkanSurfaceView(
     fun updateMesh(data: ChunkMeshData) {
         mesh = data
         if (!attached) {
-            onStatus("Mesh siap; menunggu Vulkan Surface.")
+            onStatus("Mesh CPU siap; menunggu Vulkan Surface.")
             return
         }
         uploadAndDraw()
     }
 
     override fun surfaceCreated(holder: SurfaceHolder) {
-        attach(holder)
+        // Wait for surfaceChanged so the swapchain uses the final buffer dimensions.
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-        if (width > 0 && height > 0) attach(holder)
-    }
-
-    private fun attach(holder: SurfaceHolder) {
+        if (width <= 0 || height <= 0) return
         runCatching {
             val vertex = appContext.assets.open("shaders/bedrock.vert.spv").use { it.readBytes() }
-            val fragment = context.assets.open("shaders/bedrock.frag.spv").use { it.readBytes() }
-            shaders = vertex to fragment
-            val status = VulkanBackendNative.nativeAttachSurface(holder.surface, vertex, fragment)
-            attached = status.startsWith("Vulkan renderer ready")
-            onStatus(status)
+            val fragment = appContext.assets.open("shaders/bedrock.frag.spv").use { it.readBytes() }
+            val result = VulkanBackendNative.nativeAttachSurface(holder.surface, vertex, fragment)
+            attached = result.startsWith("Vulkan renderer ready")
+            onStatus(result)
             if (attached && mesh != null) uploadAndDraw()
         }.onFailure {
             attached = false
@@ -59,7 +55,7 @@ class VulkanSurfaceView(
             check(VulkanBackendNative.nativeRender()) {
                 "Vulkan draw/present failed. Surface may need recreation."
             }
-            onStatus("Vulkan: mesh uploaded to GPU · ${data.vertexCount} vertices · ${data.faceCount} faces · indexed draw presented.")
+            onStatus("Vulkan: ${data.vertexCount} vertices · ${data.faceCount} faces uploaded; indexed draw presented.")
         }.onFailure {
             onStatus("Vulkan render error: ${it.message}")
         }
