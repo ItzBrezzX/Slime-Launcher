@@ -492,6 +492,15 @@ std::string VulkanBackend::attachSurface(void* nativeWindow,
 #endif
 }
 
+void VulkanBackend::clearMesh() {
+#ifdef __ANDROID__
+    if (state_ && state_->device != VK_NULL_HANDLE) {
+        vkDeviceWaitIdle(state_->device);
+        state_->destroyMesh();
+    }
+#endif
+}
+
 bool VulkanBackend::setMesh(const std::vector<MeshVertex>& vertices,
                             const std::vector<uint32_t>& indices) {
 #ifndef __ANDROID__
@@ -534,7 +543,7 @@ bool VulkanBackend::render() {
 #ifndef __ANDROID__
     return false;
 #else
-    if (!state_ || !state_->surfaceReady || !state_->pipeline || !state_->indexCount) return false;
+    if (!state_ || !state_->surfaceReady || !state_->pipeline) return false;
     VkResult result = vkWaitForFences(state_->device, 1, &state_->inFlight, VK_TRUE, UINT64_MAX);
     if (result != VK_SUCCESS) return false;
     uint32_t imageIndex = 0;
@@ -568,10 +577,12 @@ bool VulkanBackend::render() {
                              state_->cameraZoom, aspect};
     vkCmdPushConstants(state_->commandBuffer, state_->pipelineLayout,
                        VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(camera), camera);
-    const VkDeviceSize offset = 0;
-    vkCmdBindVertexBuffers(state_->commandBuffer, 0, 1, &state_->vertexBuffer, &offset);
-    vkCmdBindIndexBuffer(state_->commandBuffer, state_->indexBuffer, 0, VK_INDEX_TYPE_UINT32);
-    vkCmdDrawIndexed(state_->commandBuffer, state_->indexCount, 1, 0, 0, 0);
+    if (state_->indexCount > 0) {
+        const VkDeviceSize offset = 0;
+        vkCmdBindVertexBuffers(state_->commandBuffer, 0, 1, &state_->vertexBuffer, &offset);
+        vkCmdBindIndexBuffer(state_->commandBuffer, state_->indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+        vkCmdDrawIndexed(state_->commandBuffer, state_->indexCount, 1, 0, 0, 0);
+    }
     vkCmdEndRenderPass(state_->commandBuffer);
     if (vkEndCommandBuffer(state_->commandBuffer) != VK_SUCCESS) return false;
     vkResetFences(state_->device, 1, &state_->inFlight);
