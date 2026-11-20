@@ -37,7 +37,7 @@ class VulkanSurfaceView(
 
     private fun attach(holder: SurfaceHolder) {
         runCatching {
-            val vertex = context.assets.open("shaders/bedrock.vert.spv").use { it.readBytes() }
+            val vertex = appContext.assets.open("shaders/bedrock.vert.spv").use { it.readBytes() }
             val fragment = context.assets.open("shaders/bedrock.frag.spv").use { it.readBytes() }
             shaders = vertex to fragment
             val status = VulkanBackendNative.nativeAttachSurface(holder.surface, vertex, fragment)
