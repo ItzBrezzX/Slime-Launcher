@@ -11,7 +11,7 @@ object VulkanBackendNative {
 
     fun initialize(): VulkanDeviceInfo {
         val values = nativeInitialize()
-        require(values.size == 8) { "Invalid Vulkan native response" }
+        require(values.size == 9) { "Invalid Vulkan native response" }
         return VulkanDeviceInfo(
             available = values[0].toBoolean(),
             status = values[1],
@@ -21,6 +21,7 @@ object VulkanBackendNative {
             vendorId = values[5].toLongOrNull() ?: 0L,
             deviceType = values[6].toIntOrNull() ?: 0,
             deviceLocalMemoryBytes = values[7].toLongOrNull() ?: 0L,
+            graphicsQueueFamily = values[8].toIntOrNull() ?: 0,
         )
     }
 }
@@ -34,6 +35,7 @@ data class VulkanDeviceInfo(
     val vendorId: Long,
     val deviceType: Int,
     val deviceLocalMemoryBytes: Long,
+    val graphicsQueueFamily: Int,
 ) {
     val deviceLocalMemoryMiB: Long
         get() = deviceLocalMemoryBytes / (1024L * 1024L)
