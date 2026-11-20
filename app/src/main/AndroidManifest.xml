@@ -18,6 +18,11 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Slime">
         <activity
+            android:name=".bedrock.BedrockEngineActivity"
+            android:exported="false"
+            android:screenOrientation="unspecified"
+            android:theme="@style/Theme.Slime" />
+        <activity
             android:name=".runtime.MinecraftRuntimeActivity"
             android:process=":game"
             android:exported="false"
