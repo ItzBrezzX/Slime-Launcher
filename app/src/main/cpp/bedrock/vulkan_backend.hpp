@@ -31,6 +31,7 @@ public:
                               const std::vector<uint32_t>& vertexShader,
                               const std::vector<uint32_t>& fragmentShader);
     void detachSurface();
+    void clearMesh();
     bool setMesh(const std::vector<MeshVertex>& vertices,
                  const std::vector<uint32_t>& indices);
     bool render();
