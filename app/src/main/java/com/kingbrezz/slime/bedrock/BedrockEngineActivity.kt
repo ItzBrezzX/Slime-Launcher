@@ -127,33 +127,10 @@ class BedrockEngineActivity : ComponentActivity() {
 
     private fun buildSpawnRegionMesh(): ChunkMeshData {
         val parts = ArrayList<Triple<Int, Int, ChunkMeshData>>(9)
-        var totalFloats = 0
-        var totalIndices = 0
         for (z in -1..1) for (x in -1..1) {
-            val part = BedrockEngineNative.chunkMesh(x, z)
-            parts += Triple(x, z, part)
-            totalFloats += part.vertices.size
-            totalIndices += part.indices.size
+            parts += Triple(x, z, BedrockEngineNative.chunkMesh(x, z))
         }
-        val vertices = FloatArray(totalFloats)
-        val indices = IntArray(totalIndices)
-        var floatOffset = 0
-        var vertexOffset = 0
-        var indexOffset = 0
-        for ((chunkX, chunkZ, part) in parts) {
-            part.vertices.copyInto(vertices, floatOffset)
-            for (v in part.vertices.indices step 7) {
-                vertices[floatOffset + v] += chunkX * 16f
-                vertices[floatOffset + v + 2] += chunkZ * 16f
-            }
-            for (i in part.indices.indices) {
-                indices[indexOffset + i] = part.indices[i] + vertexOffset
-            }
-            floatOffset += part.vertices.size
-            vertexOffset += part.vertexCount
-            indexOffset += part.indices.size
-        }
-        return ChunkMeshData(vertices, indices)
+        return mergeChunkMeshes(parts)
     }
 
     private fun resetWorld() {
