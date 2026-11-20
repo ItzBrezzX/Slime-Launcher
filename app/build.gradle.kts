@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.kingbrezz.slime"
-    compileSdk = 35
+    compileSdk = 36
     ndkVersion = "27.0.12077973"
 
     defaultConfig {
@@ -19,13 +19,21 @@ android {
 
         externalNativeBuild {
             cmake {
-                cppFlags += listOf("-std=c++20", "-fno-exceptions", "-fno-rtti")
+                cppFlags += listOf("-std=c++20")
                 arguments += listOf("-DANDROID_STL=c++_shared")
             }
         }
 
+        // Levi's Android Preloader currently supports ARMv7 and ARM64 only.
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
+    }
+
+    sourceSets {
+        getByName("main") {
+            // Upstream bundled Android runtime bridge libraries (gxcore, PlayFab, MAE SDK).
+            jniLibs.srcDir(rootProject.file("third_party/LeviLauncher-Android/app/src/main/jniLibs"))
         }
     }
 
@@ -44,19 +52,34 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
-    kotlinOptions {
-        jvmTarget = "17"
+        // Match the pinned LeviLauncher :minecraft module and CI JDK.
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
     }
     buildFeatures {
         compose = true
         buildConfig = true
+        prefab = true
     }
     packaging {
+        jniLibs {
+            // Keep only the licensed gxcore runtime bridge from Levi's bundled native libraries.
+            excludes += listOf(
+                "**/libPlayFabMultiplayer.so",
+                "**/libinbuiltmods.so",
+                "**/libmaesdk.so",
+            )
+        }
         resources {
-            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += listOf(
+                "/META-INF/{AL2.0,LGPL2.1}",
+                "/META-INF/DEPENDENCIES",
+                "/META-INF/NOTICE",
+                "/META-INF/NOTICE.txt",
+                "/META-INF/LICENSE",
+                "/META-INF/LICENSE.txt",
+                "/META-INF/license.txt",
+            )
         }
     }
 
@@ -69,15 +92,21 @@ android {
 }
 
 dependencies {
+    implementation(project(":minecraft"))
+
+    // MainActivity in :minecraft extends AndroidX GameActivity. Keep the
+    // direct compile dependency at the exact version pinned by LeviLauncher.
+    implementation("androidx.games:games-activity:4.4.2")
+
     val composeBom = platform("androidx.compose:compose-bom:2024.10.01")
     implementation(composeBom)
     androidTestImplementation(composeBom)
 
     implementation("androidx.core:core-ktx:1.15.0")
-    implementation("androidx.activity:activity-compose:1.9.3")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
+    implementation("androidx.activity:activity-compose:1.12.2")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.10.0")
     implementation("androidx.navigation:navigation-compose:2.8.4")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
@@ -85,9 +114,16 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("com.google.code.gson:gson:2.11.0")
+    implementation("com.bytedance.android:shadowhook:2.0.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
     testImplementation("junit:junit:4.13.2")
+}
+
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
+    }
 }

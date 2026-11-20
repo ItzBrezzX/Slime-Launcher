@@ -67,6 +67,8 @@ const char* phaseName(slime::PreloaderPhase p) {
 // ---------------------------------------------------------------- lifecycle
 
 SLIME_JNI(jboolean, nativeInit)(JNIEnv* env, jobject, jstring versionId) {
+    const bool backendReady = slime::HookRegistry::instance().initializeBackend();
+    if (!backendReady) SLOG_W("inline hook backend is unavailable; hooks remain gated");
     return slime::Preloader::instance().initialize(jstr(env, versionId)) ? JNI_TRUE : JNI_FALSE;
 }
 

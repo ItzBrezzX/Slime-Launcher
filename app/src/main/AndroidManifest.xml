@@ -23,6 +23,18 @@
             android:exported="false"
             android:screenOrientation="unspecified"
             android:theme="@style/Theme.Slime" />
+        <!-- Same :game process as the native loader; gated until GameActivity bootstrap is ready. -->
+        <activity
+            android:name=".runtime.MinecraftActivity"
+            android:process=":game"
+            android:enabled="false"
+            android:exported="false"
+            android:alwaysRetainTaskState="true"
+            android:excludeFromRecents="false"
+            android:launchMode="standard"
+            android:screenOrientation="sensorLandscape"
+            android:configChanges="fontScale|density|smallestScreenSize|screenSize|uiMode|screenLayout|orientation|navigation|keyboardHidden|keyboard|touchscreen|locale|mnc|mcc"
+            android:theme="@style/Theme.Slime" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

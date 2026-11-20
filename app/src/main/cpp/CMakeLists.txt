@@ -4,6 +4,10 @@ project(slime_preloader)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+if(ANDROID)
+    add_link_options("-Wl,-z,max-page-size=16384")
+endif()
+
 add_library(slime_preloader SHARED
     src/preloader.cpp
     src/signature_manager.cpp
@@ -21,7 +25,9 @@ target_include_directories(slime_preloader PRIVATE include)
 find_library(log-lib log)
 find_library(android-lib android)
 
-target_link_libraries(slime_preloader ${log-lib} ${android-lib})
+find_package(shadowhook REQUIRED CONFIG)
+
+target_link_libraries(slime_preloader ${log-lib} ${android-lib} shadowhook::shadowhook)
 
 target_compile_options(slime_preloader PRIVATE
     -fvisibility=hidden
@@ -30,3 +36,4 @@ target_compile_options(slime_preloader PRIVATE
     -fno-exceptions
     -fno-rtti
 )
+
