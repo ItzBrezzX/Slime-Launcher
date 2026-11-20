@@ -10,6 +10,7 @@
 
 #ifdef __ANDROID__
 #include <android/native_window.h>
+#define VK_USE_PLATFORM_ANDROID_KHR 1
 #include <vulkan/vulkan.h>
 #endif
 
