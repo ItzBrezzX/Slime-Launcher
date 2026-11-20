@@ -17,10 +17,12 @@ add_library(slime_preloader SHARED
     src/module_scanner.cpp
     src/effects.cpp
     src/selftest.cpp
+    bedrock/bedrock_engine.cpp
     jni/jni_bridge.cpp
+    jni/bedrock_engine_jni.cpp
 )
 
-target_include_directories(slime_preloader PRIVATE include)
+target_include_directories(slime_preloader PRIVATE include bedrock)
 
 find_library(log-lib log)
 find_library(android-lib android)
@@ -36,4 +38,3 @@ target_compile_options(slime_preloader PRIVATE
     -fno-exceptions
     -fno-rtti
 )
-
