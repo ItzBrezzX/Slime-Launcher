@@ -1,7 +1,9 @@
 #pragma once
 
+#include "bedrock_engine.hpp"
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace slime::bedrock {
 
@@ -25,8 +27,16 @@ public:
     ~VulkanBackend();
 
     VulkanDeviceInfo initialize();
+    std::string attachSurface(void* nativeWindow,
+                              const std::vector<uint32_t>& vertexShader,
+                              const std::vector<uint32_t>& fragmentShader);
+    void detachSurface();
+    bool setMesh(const std::vector<MeshVertex>& vertices,
+                 const std::vector<uint32_t>& indices);
+    bool render();
     void shutdown();
     bool isInitialized() const;
+    bool isSurfaceReady() const;
 
 private:
     struct State;
