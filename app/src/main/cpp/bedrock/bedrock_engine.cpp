@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <utility>
 
 namespace slime::bedrock {
 namespace {
@@ -35,7 +36,10 @@ void Engine::reset() {
 }
 
 int64_t Engine::chunkKey(int x, int z) {
-    return (static_cast<int64_t>(x) << 32) ^ static_cast<uint32_t>(z);
+    const uint64_t packed =
+        (static_cast<uint64_t>(static_cast<uint32_t>(x)) << 32) |
+        static_cast<uint32_t>(z);
+    return static_cast<int64_t>(packed);
 }
 
 size_t Engine::blockIndex(int x, int y, int z) {
