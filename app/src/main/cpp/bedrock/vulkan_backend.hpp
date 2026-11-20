@@ -34,6 +34,7 @@ public:
     bool setMesh(const std::vector<MeshVertex>& vertices,
                  const std::vector<uint32_t>& indices);
     bool render();
+    void setCamera(float yaw, float pitch, float zoom);
     void shutdown();
     bool isInitialized() const;
     bool isSurfaceReady() const;
