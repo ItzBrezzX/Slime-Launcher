@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <iostream>
+#include <vector>
 
 int main() {
     slime::bedrock::VulkanBackend backend;
@@ -10,9 +11,15 @@ int main() {
     assert(!info.available);
     assert(!backend.isInitialized());
     assert(info.status.find("Android NDK build") != std::string::npos);
+    const std::vector<uint32_t> noShader;
+    assert(backend.attachSurface(nullptr, noShader, noShader).find("Android-only") != std::string::npos);
+    assert(!backend.setMesh({}, {}));
+    assert(!backend.render());
 #endif
+    backend.detachSurface();
     backend.shutdown();
     assert(!backend.isInitialized());
-    std::cout << "Vulkan backend host contract OK\n";
+    assert(!backend.isSurfaceReady());
+    std::cout << "Vulkan renderer host contract OK\n";
     return 0;
 }
