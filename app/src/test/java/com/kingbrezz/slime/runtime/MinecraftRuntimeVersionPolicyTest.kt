@@ -1,5 +1,7 @@
 package com.kingbrezz.slime.runtime
 
+import java.io.File
+import java.nio.file.Files
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -34,6 +36,37 @@ class MinecraftRuntimeVersionPolicyTest {
         val modern = requireNotNull(MinecraftRuntimeVersionPolicy.requiredGameLibraries("26.80.1"))
         assertTrue(modern.contains("libHttpClient.Android.so"))
         assertTrue(modern.contains("libMallocRedirect.so"))
+    }
+
+
+    @Test
+    fun importedRuntimeMustContainEveryVersionRequiredLibrary() {
+        val required = requireNotNull(MinecraftRuntimeVersionPolicy.requiredGameLibraries("26.80.1"))
+        val root = Files.createTempDirectory("slime-runtime-policy").toFile()
+        try {
+            val nativeDir = File(root, "native").apply { mkdirs() }
+            val present = required.filterNot { it == "libMallocRedirect.so" }
+            present.forEach { File(nativeDir, it).writeBytes(byteArrayOf(0x7f.toByte())) }
+            val manifest = MinecraftRuntimeManifest(
+                packageName = "com.mojang.minecraftpe",
+                versionName = "26.80.1",
+                versionCode = 1L,
+                abi = "arm64-v8a",
+                apkFiles = emptyList(),
+                apkSha256 = emptyMap(),
+                nativeLibraries = present,
+                nativeDirectory = "native",
+                importedAtMillis = 0L,
+            )
+            assertFalse(ImportedMinecraftRuntime(manifest, root).isPrepared)
+
+            val missing = File(nativeDir, "libMallocRedirect.so")
+            missing.writeBytes(byteArrayOf(0x7f.toByte()))
+            val completeManifest = manifest.copy(nativeLibraries = required)
+            assertTrue(ImportedMinecraftRuntime(completeManifest, root).isPrepared)
+        } finally {
+            root.deleteRecursively()
+        }
     }
 
     @Test
