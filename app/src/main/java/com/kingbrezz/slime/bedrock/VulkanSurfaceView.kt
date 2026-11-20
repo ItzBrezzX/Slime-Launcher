@@ -35,6 +35,19 @@ class VulkanSurfaceView(
         uploadAndDraw()
     }
 
+    fun clearMesh() {
+        mesh = null
+        if (!attached) return
+        runCatching {
+            VulkanBackendNative.nativeClearMesh()
+            applyCamera()
+            check(VulkanBackendNative.nativeRender()) { "Vulkan clear frame failed." }
+            onStatus("Vulkan Surface aktif; world mesh dikosongkan.")
+        }.onFailure {
+            onStatus("Vulkan clear error: ${it.message}")
+        }
+    }
+
     override fun surfaceCreated(holder: SurfaceHolder) {
         // Wait for surfaceChanged so the swapchain uses the final buffer dimensions.
     }
