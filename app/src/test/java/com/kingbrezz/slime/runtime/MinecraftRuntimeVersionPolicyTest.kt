@@ -22,17 +22,17 @@ class MinecraftRuntimeVersionPolicyTest {
 
     @Test
     fun requiredLibrariesFollowVersionThresholds() {
-        val old = MinecraftRuntimeVersionPolicy.requiredGameLibraries("1.21.90")
-        assertTrue(old!!.contains("libminecraftpe.so"))
+        val old = requireNotNull(MinecraftRuntimeVersionPolicy.requiredGameLibraries("1.21.90"))
+        assertTrue(old.contains("libminecraftpe.so"))
         assertFalse(old.contains("libHttpClient.Android.so"))
         assertFalse(old.contains("libMallocRedirect.so"))
 
-        val http = MinecraftRuntimeVersionPolicy.requiredGameLibraries("1.21.130")
-        assertTrue(http!!.contains("libHttpClient.Android.so"))
+        val http = requireNotNull(MinecraftRuntimeVersionPolicy.requiredGameLibraries("1.21.130"))
+        assertTrue(http.contains("libHttpClient.Android.so"))
         assertFalse(http.contains("libMallocRedirect.so"))
 
-        val modern = MinecraftRuntimeVersionPolicy.requiredGameLibraries("26.80.1")
-        assertTrue(modern!!.contains("libHttpClient.Android.so"))
+        val modern = requireNotNull(MinecraftRuntimeVersionPolicy.requiredGameLibraries("26.80.1"))
+        assertTrue(modern.contains("libHttpClient.Android.so"))
         assertTrue(modern.contains("libMallocRedirect.so"))
     }
 
