@@ -18,18 +18,21 @@ add_library(slime_preloader SHARED
     src/effects.cpp
     src/selftest.cpp
     bedrock/bedrock_engine.cpp
+    bedrock/vulkan_backend.cpp
     jni/jni_bridge.cpp
     jni/bedrock_engine_jni.cpp
+    jni/vulkan_backend_jni.cpp
 )
 
 target_include_directories(slime_preloader PRIVATE include bedrock)
 
 find_library(log-lib log)
 find_library(android-lib android)
+find_library(vulkan-lib vulkan REQUIRED)
 
 find_package(shadowhook REQUIRED CONFIG)
 
-target_link_libraries(slime_preloader ${log-lib} ${android-lib} shadowhook::shadowhook)
+target_link_libraries(slime_preloader ${log-lib} ${android-lib} ${vulkan-lib} shadowhook::shadowhook)
 
 target_compile_options(slime_preloader PRIVATE
     -fvisibility=hidden
