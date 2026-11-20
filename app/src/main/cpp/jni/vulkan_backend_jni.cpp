@@ -38,6 +38,11 @@ Java_com_kingbrezz_slime_bedrock_VulkanBackendNative_nativeAttachSurface(
     return makeString(env, gVulkanBackend.attachSurface(window, vertex, fragment));
 }
 
+extern "C" JNIEXPORT void JNICALL
+Java_com_kingbrezz_slime_bedrock_VulkanBackendNative_nativeClearMesh(JNIEnv*, jclass) {
+    gVulkanBackend.clearMesh();
+}
+
 extern "C" JNIEXPORT jboolean JNICALL
 Java_com_kingbrezz_slime_bedrock_VulkanBackendNative_nativeSetMesh(
     JNIEnv* env, jclass, jfloatArray vertexArray, jintArray indexArray) {
