@@ -159,6 +159,7 @@ class BedrockEngineActivity : ComponentActivity() {
     private fun resetWorld() {
         runCatching {
             BedrockEngineNative.reset()
+            renderer.value?.clearMesh()
             seed.value = System.currentTimeMillis()
             stats.value = null
             meshInfo.value = "Mesh belum dibuat."
