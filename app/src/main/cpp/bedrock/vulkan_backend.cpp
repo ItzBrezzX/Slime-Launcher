@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstddef>
 #include <cstring>
 #include <new>
 #include <string>
@@ -299,7 +300,16 @@ struct VulkanBackend::State {
         swap.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         swap.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
         swap.preTransform = caps.currentTransform;
-        swap.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+        if ((caps.supportedUsageFlags & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) == 0) return false;
+        if ((caps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR) != 0)
+            swap.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+        else if ((caps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR) != 0)
+            swap.compositeAlpha = VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
+        else if ((caps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR) != 0)
+            swap.compositeAlpha = VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR;
+        else if ((caps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR) != 0)
+            swap.compositeAlpha = VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
+        else return false;
         swap.presentMode = VK_PRESENT_MODE_FIFO_KHR; swap.clipped = VK_TRUE;
         if (vkCreateSwapchainKHR(device, &swap, nullptr, &swapchain) != VK_SUCCESS) return false;
         vkGetSwapchainImagesKHR(device, swapchain, &imageCount, nullptr);
@@ -386,6 +396,16 @@ std::string VulkanBackend::attachSurface(void* nativeWindow,
     if (result != VK_SUCCESS) { shutdown(); return "Physical-device enumeration failed."; }
     int bestScore = -1;
     for (auto physical : devices) {
+        uint32_t extensionCount = 0;
+        vkEnumerateDeviceExtensionProperties(physical, nullptr, &extensionCount, nullptr);
+        std::vector<VkExtensionProperties> availableExtensions(extensionCount);
+        vkEnumerateDeviceExtensionProperties(physical, nullptr, &extensionCount, availableExtensions.data());
+        bool hasSwapchain = false;
+        for (const auto& extension : availableExtensions) {
+            if (std::strcmp(extension.extensionName, VK_KHR_SWAPCHAIN_EXTENSION_NAME) == 0)
+                hasSwapchain = true;
+        }
+        if (!hasSwapchain) continue;
         uint32_t queuesCount = 0;
         vkGetPhysicalDeviceQueueFamilyProperties(physical, &queuesCount, nullptr);
         std::vector<VkQueueFamilyProperties> queues(queuesCount);
