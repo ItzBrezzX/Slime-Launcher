@@ -97,6 +97,8 @@ dependencies {
     // MainActivity in :minecraft extends AndroidX GameActivity. Keep the
     // direct compile dependency at the exact version pinned by LeviLauncher.
     implementation("androidx.games:games-activity:4.4.2")
+    // Mojang MainActivity in the pinned LeviLauncher module has AppCompatActivity in its superclass chain.
+    implementation("androidx.appcompat:appcompat:1.7.1")
 
     val composeBom = platform("androidx.compose:compose-bom:2024.10.01")
     implementation(composeBom)
