@@ -29,6 +29,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.kingbrezz.slime.bedrock.BedrockEngineActivity
 import com.kingbrezz.slime.data.SlimeRepository
 import com.kingbrezz.slime.nav.Routes
 import com.kingbrezz.slime.runtime.MinecraftRuntimeActivity
@@ -112,6 +113,9 @@ class MainActivity : ComponentActivity() {
                                         },
                                         onOpenVersions = { nav.navigate(Routes.VERSIONS) },
                                         onOpenConfigs = { nav.navigate(Routes.CONFIGS) },
+                                        onOpenBedrockEngine = {
+                                            startActivity(Intent(this@MainActivity, BedrockEngineActivity::class.java))
+                                        },
                                     )
                                 }
                                 composable(Routes.VERSIONS) {
