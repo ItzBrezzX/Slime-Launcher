@@ -511,7 +511,6 @@ bool VulkanBackend::render() {
                                    state_->imageAvailable, VK_NULL_HANDLE, &imageIndex);
     if (result == VK_ERROR_OUT_OF_DATE_KHR) return false;
     if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) return false;
-    vkResetFences(state_->device, 1, &state_->inFlight);
     vkResetCommandBuffer(state_->commandBuffer, 0);
     VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     if (vkBeginCommandBuffer(state_->commandBuffer, &begin) != VK_SUCCESS) return false;
@@ -534,6 +533,7 @@ bool VulkanBackend::render() {
     vkCmdDrawIndexed(state_->commandBuffer, state_->indexCount, 1, 0, 0, 0);
     vkCmdEndRenderPass(state_->commandBuffer);
     if (vkEndCommandBuffer(state_->commandBuffer) != VK_SUCCESS) return false;
+    vkResetFences(state_->device, 1, &state_->inFlight);
     const VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
     submit.waitSemaphoreCount = 1; submit.pWaitSemaphores = &state_->imageAvailable;
@@ -546,6 +546,8 @@ bool VulkanBackend::render() {
     present.swapchainCount = 1; present.pSwapchains = &state_->swapchain;
     present.pImageIndices = &imageIndex;
     result = vkQueuePresentKHR(state_->graphicsQueue, &present);
+    // A single present semaphore is reused; wait for the present queue to consume it.
+    vkQueueWaitIdle(state_->graphicsQueue);
     return result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR;
 #endif
 }
