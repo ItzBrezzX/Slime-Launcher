@@ -49,6 +49,7 @@ fun HomeScreen(
     onPlay: () -> Unit,
     onOpenVersions: () -> Unit,
     onOpenConfigs: () -> Unit,
+    onOpenBedrockEngine: () -> Unit,
 ) {
     val version = vm.activeVersion()
     val logs by vm.logs.collectAsState()
@@ -105,6 +106,10 @@ fun HomeScreen(
             Spacer(Modifier.height(8.dp))
             OutlinedButton(onClick = onOpenVersions, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(10.dp)) {
                 Text(if (version?.installed == true) "Ganti versi" else "Pasang versi", color = Fg)
+            }
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = onOpenBedrockEngine, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(10.dp)) {
+                Text("Horizon Bedrock Engine (dev)", color = Fg)
             }
             Spacer(Modifier.height(8.dp))
             OutlinedButton(onClick = { vm.openModMenu() }, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(10.dp)) {
