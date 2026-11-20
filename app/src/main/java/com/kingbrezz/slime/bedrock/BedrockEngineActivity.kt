@@ -31,6 +31,7 @@ import com.kingbrezz.slime.ui.theme.SlimeTheme
 class BedrockEngineActivity : ComponentActivity() {
     private val status = mutableStateOf("Engine belum diinisialisasi.")
     private val stats = mutableStateOf<ChunkStats?>(null)
+    private val meshInfo = mutableStateOf("Mesh belum dibuat.")
     private val seed = mutableStateOf(System.currentTimeMillis())
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -57,6 +58,7 @@ class BedrockEngineActivity : ComponentActivity() {
                             Text("Water blocks: ${chunk.waterBlocks}", color = Fg, fontSize = 14.sp)
                             Text("Visible faces: ${chunk.visibleFaces}", color = Fg, fontSize = 14.sp)
                             Text("Terrain height: ${chunk.minHeight}–${chunk.maxHeight}", color = Fg, fontSize = 14.sp)
+                            Text(meshInfo.value, color = Fg, fontSize = 13.sp)
                         }
                         Text(status.value, color = Muted, fontSize = 12.sp)
                         Spacer(Modifier.weight(1f))
@@ -108,7 +110,10 @@ class BedrockEngineActivity : ComponentActivity() {
                 }
             }
             stats.value = BedrockEngineNative.chunkStats(0, 0)
-            status.value = "9 chunk berhasil dibuat. Ini data world, belum dirender ke layar."
+            val mesh = BedrockEngineNative.chunkMesh(0, 0)
+            val storage = BedrockEngineNative.chunkStorageBytes(0, 0)
+            meshInfo.value = "Mesh: ${mesh.vertexCount} vertices · ${mesh.faceCount} faces · ${mesh.memoryBytes / 1024} KiB; chunk storage: ${storage / 1024} KiB"
+            status.value = "9 chunk dibuat. Mesh CPU siap; belum dikirim ke GPU."
         }.onFailure {
             status.value = "Generation error: ${it.message}"
         }
@@ -119,6 +124,7 @@ class BedrockEngineActivity : ComponentActivity() {
             BedrockEngineNative.reset()
             seed.value = System.currentTimeMillis()
             stats.value = null
+            meshInfo.value = "Mesh belum dibuat."
             createWorld()
             status.value = "World di-reset. Seed baru siap."
         }.onFailure {
