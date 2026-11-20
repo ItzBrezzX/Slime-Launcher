@@ -73,6 +73,12 @@ Java_com_kingbrezz_slime_bedrock_VulkanBackendNative_nativeRender(JNIEnv*, jclas
 }
 
 extern "C" JNIEXPORT void JNICALL
+Java_com_kingbrezz_slime_bedrock_VulkanBackendNative_nativeSetCamera(
+    JNIEnv*, jclass, jfloat yaw, jfloat pitch, jfloat zoom) {
+    gVulkanBackend.setCamera(yaw, pitch, zoom);
+}
+
+extern "C" JNIEXPORT void JNICALL
 Java_com_kingbrezz_slime_bedrock_VulkanBackendNative_nativeDetachSurface(JNIEnv*, jclass) {
     gVulkanBackend.detachSurface();
 }
