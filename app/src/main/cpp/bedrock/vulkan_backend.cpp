@@ -57,6 +57,8 @@ struct VulkanBackend::State {
     VkBuffer indexBuffer = VK_NULL_HANDLE;
     VkDeviceMemory indexMemory = VK_NULL_HANDLE;
     uint32_t indexCount = 0;
+    std::vector<uint32_t> vertexShaderCode;
+    std::vector<uint32_t> fragmentShaderCode;
     float cameraYaw = 0.785398163F;
     float cameraPitch = 0.65F;
     float cameraZoom = 1.0F;
@@ -280,6 +282,22 @@ struct VulkanBackend::State {
         return vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &info, nullptr, &pipeline) == VK_SUCCESS;
     }
 
+    bool recreateSwapchain() {
+        if (device == VK_NULL_HANDLE || vertexShaderCode.empty() || fragmentShaderCode.empty())
+            return false;
+        vkDeviceWaitIdle(device);
+        destroySwapchain();
+        if (imageAvailable) vkDestroySemaphore(device, imageAvailable, nullptr);
+        if (renderFinished) vkDestroySemaphore(device, renderFinished, nullptr);
+        imageAvailable = VK_NULL_HANDLE;
+        renderFinished = VK_NULL_HANDLE;
+        VkSemaphoreCreateInfo semaphore{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+        if (vkCreateSemaphore(device, &semaphore, nullptr, &imageAvailable) != VK_SUCCESS ||
+            vkCreateSemaphore(device, &semaphore, nullptr, &renderFinished) != VK_SUCCESS)
+            return false;
+        return createSwapchain(vertexShaderCode, fragmentShaderCode);
+    }
+
     bool createSwapchain(const std::vector<uint32_t>& vert, const std::vector<uint32_t>& frag) {
         VkSurfaceCapabilitiesKHR caps{};
         if (vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &caps) != VK_SUCCESS) return false;
@@ -463,7 +481,9 @@ std::string VulkanBackend::attachSurface(void* nativeWindow,
     VkFenceCreateInfo fence{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
     fence.flags = VK_FENCE_CREATE_SIGNALED_BIT;
     if (vkCreateFence(state_->device, &fence, nullptr, &state_->inFlight) != VK_SUCCESS) { shutdown(); return "Vulkan frame fence creation failed."; }
-    if (!state_->createSwapchain(vertexShader, fragmentShader)) { shutdown(); return "Swapchain, depth buffer, render pass, framebuffer or graphics pipeline creation failed."; }
+    state_->vertexShaderCode = vertexShader;
+    state_->fragmentShaderCode = fragmentShader;
+    if (!state_->createSwapchain(state_->vertexShaderCode, state_->fragmentShaderCode)) { shutdown(); return "Swapchain, depth buffer, render pass, framebuffer or graphics pipeline creation failed."; }
     state_->initialized = true; state_->surfaceReady = true;
     VkPhysicalDeviceProperties props{}; vkGetPhysicalDeviceProperties(state_->physicalDevice, &props);
     return "Vulkan renderer ready: " + std::string(props.deviceName) + " · swapchain " +
@@ -520,7 +540,10 @@ bool VulkanBackend::render() {
     uint32_t imageIndex = 0;
     result = vkAcquireNextImageKHR(state_->device, state_->swapchain, UINT64_MAX,
                                    state_->imageAvailable, VK_NULL_HANDLE, &imageIndex);
-    if (result == VK_ERROR_OUT_OF_DATE_KHR) return false;
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+        if (!state_->recreateSwapchain()) { state_->surfaceReady = false; return false; }
+        return render();
+    }
     if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) return false;
     vkResetCommandBuffer(state_->commandBuffer, 0);
     VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
@@ -558,15 +581,22 @@ bool VulkanBackend::render() {
     submit.pWaitDstStageMask = &waitStage;
     submit.commandBufferCount = 1; submit.pCommandBuffers = &state_->commandBuffer;
     submit.signalSemaphoreCount = 1; submit.pSignalSemaphores = &state_->renderFinished;
-    if (vkQueueSubmit(state_->graphicsQueue, 1, &submit, state_->inFlight) != VK_SUCCESS) return false;
+    if (vkQueueSubmit(state_->graphicsQueue, 1, &submit, state_->inFlight) != VK_SUCCESS) {
+        state_->surfaceReady = false;
+        return false;
+    }
     VkPresentInfoKHR present{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
     present.waitSemaphoreCount = 1; present.pWaitSemaphores = &state_->renderFinished;
     present.swapchainCount = 1; present.pSwapchains = &state_->swapchain;
     present.pImageIndices = &imageIndex;
     result = vkQueuePresentKHR(state_->graphicsQueue, &present);
-    // A single present semaphore is reused; wait for the present queue to consume it.
+    // Wait until presentation has consumed the semaphore before reusing or replacing it.
     vkQueueWaitIdle(state_->graphicsQueue);
-    return result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR;
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+        if (!state_->recreateSwapchain()) { state_->surfaceReady = false; return false; }
+        return render();
+    }
+    return result == VK_SUCCESS;
 #endif
 }
 
