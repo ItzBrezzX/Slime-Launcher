@@ -41,16 +41,15 @@ data class ImportedMinecraftRuntime(
         get() = File(nativeLibraryDirectory, "libminecraftpe.so")
 
     val isPrepared: Boolean
-        get() = manifest.packageName == Catalog.MC_PACKAGE &&
-            manifest.abi.isNotBlank() &&
-            listOf(
-                "libc++_shared.so",
-                "libfmod.so",
-                "libMediaDecoders_Android.so",
-                "libminecraftpe.so",
-            ).all { name ->
+        get() {
+            if (manifest.packageName != Catalog.MC_PACKAGE || manifest.abi.isBlank()) return false
+            val requiredLibraries = MinecraftRuntimeVersionPolicy.requiredGameLibraries(manifest.versionName)
+                ?: return false
+            if (!manifest.nativeLibraries.containsAll(requiredLibraries)) return false
+            return requiredLibraries.all { name ->
                 File(nativeLibraryDirectory, name).let { it.isFile && it.length() > 0L }
             }
+        }
 }
 
 /**
